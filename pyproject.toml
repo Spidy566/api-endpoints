@@ -1,0 +1,18 @@
+[project]
+name = "fresa-api"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "boto3>=1.42.4",
+    "docxtpl>=0.20.2",
+    "easyocr>=1.7.2",
+    "extract-msg>=0.55.0",
+    "fastapi[standard]>=0.124.0",
+    "pillow>=12.0.0",
+    "pyhanko>=0.32.0",
+    "pymupdf>=1.26.6",
+    "pytesseract>=0.3.13",
+    "requests>=2.32.5",
+]
