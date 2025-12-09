@@ -1,19 +1,21 @@
-from pydantic import BaseModel, field_validator
-from typing import Optional
+from tkinter.scrolledtext import example
+
+from pydantic import BaseModel, field_validator, Field
+from typing import Optional, Any, Union
 
 
 class ExtractionRequest(BaseModel):
-    p_input_content: str
-    p_api_name: str
-    p_api_model: str
-    p_api_key: str
-    p_api_token: str
-    p_template_name: str
-    p_template_prompt_header: str = ""
-    p_template_prompt_details: str = ""
-    p_temperature: float = 0.1
-    p_top_p: float = 0.9
-    p_timeout: int = 180
+    p_input_content: str = Field(..., title="", description="Base64 encoded file (PDF/JPG/PNG)")
+    p_api_name: str = Field(..., title="", description="Must be 'openai'", examples=["openai"])
+    p_api_model: str = Field(..., title="", description="GPT Model ID", examples=["gpt-4-turbo"])
+    p_api_key: str = Field(..., description="OpenAI API Key")
+    p_api_token: str = Field(..., title="", description="Max tokens for API response", examples=["4000"])
+    p_template_name: str = Field(..., title="", description="Name of the extraction template")
+    p_template_prompt_header: str = Field(default="", title="", description="Prompt for header extraction")
+    p_template_prompt_details: str = Field(default="", title="", description="Prompt for detailed extraction")
+    p_temperature: float = Field(default=0.9, ge=0.0, le=1.0, title="")
+    p_top_p: float = Field(default=0.9, ge=0.0, le=1.0, title="")
+    p_timeout: int = Field(default=180, title="", description="Request timeout in seconds")
 
     @field_validator('p_input_content', 'p_api_key', 'p_template_name')
     @classmethod

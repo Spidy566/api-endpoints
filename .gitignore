@@ -4,3 +4,4 @@
 .env
 *.pyc
 /*.egg-info
+/logs
