@@ -1,4 +1,4 @@
-from typing import List, Optional, Literal
+from typing import List, Optional, Literal, Dict
 from pydantic import BaseModel, EmailStr, SecretStr, ConfigDict, Field
 from pydantic.alias_generators import to_pascal
 
@@ -33,12 +33,35 @@ class SmtpConfig(BaseModel):
     model_config = ConfigDict(alias_generator=to_pascal, populate_by_name=True)
 
 class EmailRequest(BaseModel):
-    SmtpConfig: SmtpConfig = Field(..., title="", description="SMTP configuration for sending the email.")
-    Message: EmailMessage = Field(..., title="", description="Email message details.")
+    smtp_config: SmtpConfig = Field(..., title="", description="SMTP configuration for sending the email.")
+    message: EmailMessage = Field(..., title="", description="Email message details.")
 
     model_config = ConfigDict(alias_generator=to_pascal, populate_by_name=True)
+
+class SendEmailResponse(BaseModel):
+    status: str = Field(..., title="", description="Status of the email sending operation.")
+    message: str = Field(..., title="", description="Message associated with the status.")
 
 class EmailBase64Request(BaseModel):
     file_base64: str = Field(..., title="", description="Base64 encoded email file content.")
     file_type: str = Field(..., title="", description="Type of the email file ('eml' or 'msg').")
     file_name: str = Field(default=None, title="", description="Optional: Name of the email file.")
+
+class ExtractedAttachment(BaseModel):
+    index: Optional[int] = Field(default=None, title="", description="Index of the attachment in the email.")
+    filename: str = Field(..., title="", description="Name of the extracted file.")
+    content_type: str = Field(..., title="", description="Content type of the extracted file.")
+    file_extension: str = Field(..., title="", description="File extension of the extracted file.")
+    size_bytes: int = Field(..., title="", description="Size of the extracted file in bytes.")
+    base64_length: Optional[int] = Field(default=None, title="", description="Length of the base64 encoded content.")
+    content: str = Field(..., title="", description="Base64 encoded content of the extracted file.")
+
+class EmailExtractionResponse(BaseModel):
+    success: bool = Field(..., title="", description="Whether the extraction was successful.")
+    message: Optional[str] = Field(default=None, title="", description="Message associated with the extraction status.")
+    file_type: str = Field(..., title="", description="Detected file type (eml/msg).")
+    file_name: Optional[str] = Field(default=None, title="", description="Name of the source file.")
+    total_attachments: int = Field(..., title="", description="Count of attachments found.")
+    file_type_counts: Optional[Dict[str, int]] = Field(default=None, title="", description="Summary of attachment types found.")
+    supported_formats: Optional[List[str]] = Field(default=None, title="", description="List of supported formats.")
+    attachments: List[ExtractedAttachment] = Field(..., title="", description="List of extracted attachment objects.")

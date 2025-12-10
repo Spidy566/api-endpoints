@@ -6,8 +6,13 @@ from modules.email import schemas, services
 router = APIRouter()
 
 
-@router.post('/extract_email_attachments')
-async def extract_attachments(file: UploadFile = File(...)):
+@router.post(
+    '/extract_email_attachments',
+    summary="Extract Attachments (File Upload)",
+    description="Upload a raw .msg or .eml file. Parses the email structure and extracts all supported attachments as Base64.",
+    response_model=schemas.EmailExtractionResponse,
+)
+async def extract_attachments(file: UploadFile = File(..., title="", description="The .msg or .eml file to process.")):
     """Main endpoint to extract supported attachments from email files"""
     try:
         logger.info("=== NEW EMAIL EXTRACTION REQUEST STARTED ===")
@@ -88,7 +93,12 @@ async def extract_attachments(file: UploadFile = File(...)):
         logger.error(f"Error processing email extraction request: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
-@router.post("/extract_email_attachments_base64")
+@router.post(
+    "/extract_email_attachments_base64",
+    summary="Extract Attachments (Base64)",
+    description="Accepts a Base64 string of a .msg or .eml file and extracts attachments.",
+    response_model=schemas.EmailExtractionResponse,
+)
 async def extract_attachments_base64(request: schemas.EmailBase64Request):
     """Extract attachments from base64 EML/MSG input."""
     try:
@@ -110,7 +120,12 @@ async def extract_attachments_base64(request: schemas.EmailBase64Request):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
 
-@router.post("/send_mail_using_customer_server")
+@router.post(
+    "/send_mail_using_customer_server",
+    summary="Send Email (SMTP)",
+    description="Sends an email (with optional attachments/HTML) using provided SMTP credentials.",
+    response_model=schemas.SendEmailResponse,
+)
 async def send_email_endpoint(request: schemas.EmailRequest):
     success, message = services.send_email_logic(request.SmtpConfig, request.Message)
 
