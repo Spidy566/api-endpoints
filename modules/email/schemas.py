@@ -4,41 +4,41 @@ from pydantic.alias_generators import to_pascal
 
 
 class Attachment(BaseModel):
-    Filename: str
-    Content: str
+    Filename: str = Field(..., title="", description="Name of the file to attach (e.g., 'invoice.pdf').")
+    Content: str = Field(..., title="", description="Base64 encoded content of the attachment.")
 
 class EmailMessage(BaseModel):
-    From: EmailStr
-    To: List[EmailStr]
-    Cc: Optional[List[EmailStr]] = []
-    Bcc: Optional[List[EmailStr]] = []
-    Subject: str
-    TextBody: str
-    HtmlBody: Optional[str] = None
+    From: EmailStr = Field(..., title="", description="Sender's email address.")
+    To: List[EmailStr] = Field(..., title="", description="List of recipient email addresses.")
+    Cc: Optional[List[EmailStr]] = Field(default=[], title="", description="List of CC recipient email addresses.")
+    Bcc: Optional[List[EmailStr]] = Field(default=[], title="", description="List of BCC recipient email addresses.")
+    Subject: str = Field(..., title="", description="Email subject.")
+    TextBody: str = Field(..., title="", description="Plain text body of the email.")
+    HtmlBody: Optional[str] = Field(default=None, title="", description="HTML body of the email.")
     HtmlBodyEncoding: Optional[Literal['plain', 'hex', 'quoted-printable', 'html-entities', 'base64']] = Field(
         default='plain',
         description="Encoding type for HtmlBody. Options are 'plain', 'hex', 'quoted-printable', 'html-entities', 'base64'."
     )
-    ReplyTo: Optional[EmailStr] = None
-    Attachments: Optional[List[Attachment]] = None
+    ReplyTo: Optional[EmailStr] = Field(default=None, title="", description="Email address to reply to.")
+    Attachments: Optional[List[Attachment]] = Field(default=None, title="", description="List of attachments.")
 
     model_config = ConfigDict(alias_generator=to_pascal, populate_by_name=True)
 
 class SmtpConfig(BaseModel):
-    Server: str
-    Port: int
-    Username: EmailStr
-    Password: SecretStr
+    Server: str = Field(..., title="", description="SMTP server hostname.")
+    Port: int = Field(..., title="", description="SMTP server port.")
+    Username: EmailStr = Field(..., title="", description="SMTP username.")
+    Password: SecretStr = Field(..., title="", description="SMTP password or App Password.")
 
     model_config = ConfigDict(alias_generator=to_pascal, populate_by_name=True)
 
 class EmailRequest(BaseModel):
-    SmtpConfig: SmtpConfig
-    Message: EmailMessage
+    SmtpConfig: SmtpConfig = Field(..., title="", description="SMTP configuration for sending the email.")
+    Message: EmailMessage = Field(..., title="", description="Email message details.")
 
     model_config = ConfigDict(alias_generator=to_pascal, populate_by_name=True)
 
 class EmailBase64Request(BaseModel):
-    file_base64: str
-    file_type: str
-    file_name: str = None
+    file_base64: str = Field(..., title="", description="Base64 encoded email file content.")
+    file_type: str = Field(..., title="", description="Type of the email file ('eml' or 'msg').")
+    file_name: str = Field(default=None, title="", description="Optional: Name of the email file.")

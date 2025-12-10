@@ -1,7 +1,6 @@
 import base64
 import binascii
 from datetime import datetime
-from io import BytesIO
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
@@ -12,31 +11,13 @@ from modules.signature import schemas, services
 router = APIRouter()
 
 
-@router.get("/")
-async def signature_info():
-    """Information endpoint about the signature service."""
-    # Count certs safely
-    try:
-        cert_count = len(list(CERT_DIR.glob("*.pfx")))
-    except Exception:
-        cert_count = 0
 
-    return {
-        "service": "Adobe-Compatible Digital Signature API",
-        "description": "Creates clean digital signatures without visual stamps",
-        "version": "6.1.0",
-        "signature_type": "PKCS#7 Digital Signature",
-        "features": [
-            "Clean signature field",
-            "Click-to-verify system",
-            "Certificate chain validation",
-            "Compliant with Adobe PDF standards"
-        ],
-        "certificates_available": cert_count
-    }
-
-
-@router.post("/sign-invoice", response_model=schemas.InvoiceSignResponse)
+@router.post(
+    "/sign-invoice",
+    summary="Sign Invoice",
+    description="Digitally signs a PDF using a server-stored PFX certificate. Supports visual stamps and Adobe-compatible signatures.",
+    response_model=schemas.InvoiceSignResponse
+)
 async def sign_invoice(request: schemas.InvoiceSignRequest):
     logger.info(f"Digital signature request for: {request.name}")
 
@@ -108,7 +89,12 @@ async def sign_invoice(request: schemas.InvoiceSignRequest):
         return JSONResponse(status_code=500, content={"error": f"Unexpected server error: {str(e)}"})
 
 
-@router.post("/validate-signature")
+@router.post(
+    "/validate-signature",
+    summary="Validate Signed PDF",
+    description="Analyzes a PDF for digital signatures and verifies their integrity and trust status.",
+    response_model=schemas.ValidationResponse
+)
 async def validate_signature(request: schemas.ValidationRequest):
     """Validate an existing signed PDF."""
     try:
@@ -119,10 +105,15 @@ async def validate_signature(request: schemas.ValidationRequest):
         raise HTTPException(status_code=400, detail=str(e))
 
 
-@router.post("/upload_certificate")
+@router.post(
+    "/upload_certificate",
+    summary="Upload PFX Certificate",
+    description="Upload a .pfx file to the server for use in signing. Requires 'overwrite=True' to replace existing certs.",
+    response_model=schemas.UploadCertResponse
+)
 async def upload_certificate(
-        file: UploadFile = File(...),
-        overwrite: bool = Form(False)
+        file: UploadFile = File(..., title="", description="The .pfx certificate file."),
+        overwrite: bool = Form(default=False, title="", description="Whether to overwrite an existing certificate.")
 ):
     """Upload a .pfx certificate file."""
     if not file.filename.lower().endswith('.pfx'):

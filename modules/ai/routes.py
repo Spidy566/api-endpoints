@@ -8,7 +8,12 @@ from modules.ai import schemas, services, utils
 router = APIRouter()
 
 
-@router.post("/openai_extract")
+@router.post(
+    "/openai_extract",
+    summary="Openai Extract",
+    description="Accepts Base64 (PDF/Img), sends to OpenAI, returns structured JSON.",
+    response_model=schemas.ExtractionResponse
+)
 async def openai_extract(request: schemas.ExtractionRequest):
     """Extract data from PDF/JPEG/JPG/PNG files"""
     try:
@@ -61,11 +66,16 @@ async def openai_extract(request: schemas.ExtractionRequest):
         logger.error(f"Server error: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
 
-@router.post("/scan_vc")
+@router.post(
+    "/scan_vc",
+    summary="Scan Visiting Card",
+    description="Upload image/PDF, performs OCR, then AI extraction and returns structured JSON.",
+    response_model=schemas.VCScanResponse
+)
 async def scan_visiting_card(
-    file: UploadFile = File(...),
-    api_key: Optional[str] = Form(None),
-    model: Optional[str] = Form("gpt-5-mini"),
+    file: UploadFile = File(..., title="", description="The visiting card file. Supports JPG, PNG, and PDF."),
+    api_key: Optional[str] = Form(None, title="", description="The OpenAI API Key.",),
+    model: Optional[str] = Form(None, title="", description="The OpenAI model ID to use for extraction.", examples=['gpt-4o', 'gpt-4o-mini']),
 ):
     """Scans a visiting card (JPG/PNG/PDF), performs OCR, and returns structured JSON."""
     temp_path = None

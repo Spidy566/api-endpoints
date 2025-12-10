@@ -1,17 +1,17 @@
-from pydantic import BaseModel
-from typing import List, Dict, Any, Optional
+from pydantic import BaseModel, Field
+from typing import Dict, Any
 
 class ReportRequest(BaseModel):
-    template_file: str
-    report_name: str
-    records: list[Dict[str, Any]]
+    template_file: str = Field(..., title="", description="Base64 encoded string of the .docx template file.")
+    report_name: str = Field(..., title="", description="The desired name for the output file (without extension).")
+    records: list[Dict[str, Any]] = Field(..., title="", description="A list of data dictionaries to populate the template variables ({{var_name}}).")
 
 class MergeFileItem(BaseModel):
-    filename: str = "file"
-    mimetype: str
-    base64content: str
+    filename: str = Field(default="file", title="", description="The original filename (used for logging/debugging).")
+    mimetype: str = Field(..., title="", description="The MIME type of the file. Supports 'application/pdf', 'image/jpeg', 'image/png'.")
+    base64content: str = Field(..., title="", description="Base64 encoded string of the file.")
 
 class MergeResponse(BaseModel):
-    outputfilename: str
-    outputmimetype: str
-    outputbase64content: str
+    outputfilename: str = Field(..., title="", description="Filename of the generated merged PDF.")
+    outputmimetype: str = Field(..., title="", description="MIME type of the generated merged PDF.")
+    outputbase64content: str = Field(..., title="", description="Base64 encoded string of the final merged PDF.")

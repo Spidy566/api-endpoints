@@ -1,8 +1,6 @@
-import sys
 import subprocess
 import uvicorn
 import uuid
-from pathlib import Path
 from contextlib import asynccontextmanager
 from datetime import datetime
 from fastapi import FastAPI, Request
@@ -44,14 +42,45 @@ async def lifespan(app: FastAPI):
     thread_pool_executor.shutdown(wait=True)
     print("--- [FastAPI] Cleanup complete ---")
 
+tags_metadata = [
+    {
+        "name": "AI",
+        "description": "Integration with **OpenAI** models for intelligent document extraction, visiting card scanning, and generic OCR tasks.",
+    },
+    {
+        "name": "AWS",
+        "description": "Integration with **AWS S3** for storage and **AWS Textract** for enterprise-grade OCR. Includes specific parsers for Vendor Invoices, Expenses, and Cargo Manifests.",
+    },
+    {
+        "name": "Signature",
+        "description": "Adobe-compatible **Digital Signature** services. Supports PFX certificates, visible/invisible signing, and validation.",
+    },
+    {
+        "name": "Documents",
+        "description": "Utilities for PDF merging, report generation (DOCX templating), and file conversion.",
+    },
+    {
+        "name": "Email",
+        "description": "Tools to parse email files (.eml/.msg), extract attachments, and send emails via SMTP.",
+    },
+    {
+        "name": "Backup",
+        "description": "Simple file backup and retrieval endpoints.",
+    },
+    {
+        "name": "Logs",
+        "description": "Access to API request/response logs for auditing and debugging.",
+    },
+]
 
 app = FastAPI(
     title="Fresa Local testing",
-    description="Full documentation for PDF parsing, Textract, email attachments, digital signature, and OpenAI extraction.",
+    description="Full documentation of API for Documents, AI, and Integrations.",
     version="2.0.0",
     docs_url="/docs",
     redoc_url=None,
     openapi_url="/openapi.json",
+    openapi_tags=tags_metadata,
     lifespan=lifespan
 )
 

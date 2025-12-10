@@ -11,10 +11,23 @@ from modules.documents import schemas, services
 router = APIRouter()
 
 
-@router.post("/generate-report")
+@router.post(
+    "/generate-report",
+    summary="Generate Report",
+    description="Populates a DOCX template with dynamic data. Returns a binary file download. Supports converting result to PDF.",
+    responses={
+        200: {
+            "content": {
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document": {},
+                "application/pdf": {}
+            },
+            "description": "Returns the generated file as a binary stream."
+        }
+    }
+)
 async def generate_report(
         request: schemas.ReportRequest,
-        output_format: str = Query("docx", enum=["docx", "pdf"])
+        output_format: str = Query("docx", enum=["docx", "pdf"], title="", description="Output format: 'docx' (default) or 'pdf'.")
 ):
     try:
         base_template_bytes = base64.b64decode(request.template_file)
@@ -81,8 +94,13 @@ async def generate_report(
         print(f"Error during report generation: {e}")
         raise HTTPException(status_code=500, detail=f"An unexpected server error occurred: {str(e)}")
 
-@router.post("/merge_pdf", response_model=schemas.MergeResponse)
-async def merge_base64_json(files: list[schemas.MergeFileItem] = Body(...)):
+@router.post(
+    "/merge_pdf",
+    summary="Merge Files to PDF",
+    description="Accepts a list of Base64 files (PDFs or Images), merges them into a single PDF, and returns the result as Base64.",
+    response_model=schemas.MergeResponse,
+)
+async def merge_base64_json(files: list[schemas.MergeFileItem] = Body(..., title="", description="List of files to merge.")):
     try:
         files_dict = [item.model_dump() for item in files]
         result = services.merge_files_logic(files_dict)

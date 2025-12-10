@@ -1,25 +1,55 @@
-from pydantic import BaseModel
-from typing import Optional, Dict, Any
+from pydantic import BaseModel, Field
+from typing import List, Optional
 
 class InvoiceSignRequest(BaseModel):
-    invoice_pdf_base64: str
-    name: str
-    password: str
-    username: Optional[str] = None
-    reason: Optional[str] = "Document Authentication"
-    location: Optional[str] = "India"
-    visible_signature: Optional[bool] = True
-    page_number: Optional[int] = -1
-    x_coordinate: Optional[float] = 350
-    y_coordinate: Optional[float] = 50
-    box_width: Optional[float] = 200
-    box_height: Optional[float] = 70
-
-class InvoiceSignResponse(BaseModel):
-    signed_pdf_base64: str
-    error: Optional[str] = None
-    auth_error: Optional[str] = None
-    signature_info: Optional[dict] = None
+    invoice_pdf_base64: str = Field(..., title="",description="Base64 encoded string of the PDF file to be signed.")
+    name: str = Field(..., title="", description="Name of the signer. Must match the filename of a .pfx certificate stored on the server.")
+    password: str = Field(..., title="", description="Password to decrypt the .pfx certificate.")
+    username: Optional[str] = Field(default=None, title="", description="Optional username to validate against the signer name. If provided, must match 'name'.")
+    reason: Optional[str] = Field(default="Document Authentication", title="", description="The reason for signing this document.")
+    location: Optional[str] = Field(default="India", title="", description="The physical location of the signer.")
+    visible_signature: Optional[bool] = Field(default=True, title="", description="If True, adds a visual signature box to the PDF. If False, adds an invisible digital signature.")
+    page_number: Optional[int] = Field(default=-1, title="", description="Page number to place the signature on. Use -1 for the last page.")
+    x_coordinate: Optional[float] = Field(default=350, title="", description="X-coordinate (horizontal position) for the signature box.")
+    y_coordinate: Optional[float] = Field(default=50, title="", description="Y-coordinate (vertical position) for the signature box.")
+    box_width: Optional[float] = Field(default=200, title="", description="Width of the visual signature box.")
+    box_height: Optional[float] = Field(default=70, title="", description="Height of the visual signature box.")
 
 class ValidationRequest(BaseModel):
-    signed_pdf_base64: str
+    signed_pdf_base64: str = Field(..., title="", description="Base64 encoded string of the signed PDF file to be validated.")
+
+class SignatureInfo(BaseModel):
+    signer: str = Field(..., title="", description="Name of the signer.")
+    organization: Optional[str] = Field(default=None, title="", description="Organization of the signer.")
+    timestamp: str = Field(..., title="", description="Timestamp of the signature.")
+    reason: Optional[str] = Field(default=None, title="", description="Reason for signing the document.")
+    verification_status: str = Field(..., title="", description="Status of the signature verification.")
+
+class InvoiceSignResponse(BaseModel):
+    signed_pdf_base64: str = Field(..., title="", description="Base64 encoded string of the signed PDF file.")
+    error: Optional[str] = Field(default=None, title="", description="Error message if the signature process failed.")
+    auth_error: Optional[str] = Field(default=None, title="", description="Error message if the username/name mismatch occurs.")
+    signature_info: Optional[dict] = Field(default=None, title="", description="Metadata about the successfully applied signature.")
+
+class SignatureDetails(BaseModel):
+    field_name: str = Field(..., title="", description="Name of the signature field.")
+    signer: str = Field(..., title="", description="Name of the signer.")
+    valid: bool = Field(..., title="", description="Whether the signature is valid.")
+    trusted: bool = Field(..., title="", description="Whether the signer is trusted.")
+    timestamp: Optional[str] = Field(default=None, title="", description="Timestamp of the signature.")
+    intact: bool = Field(..., title="", description="True if the document has not been modified since signing.")
+    status: str = Field(..., title="", description="Status of the signature validation.")
+    visual_indicator: str = Field(..., title="", description="Visual indicator of the signature status.")
+    error: Optional[str] = Field(default=None, title="", description="Error message if the signature validation failed.")
+
+class ValidationResponse(BaseModel):
+    has_signatures: bool = Field(..., title="", description="True if the PDF contains embedded signatures.")
+    signature_count: int = Field(..., title="", description="Number of embedded signatures in the PDF.")
+    signatures: Optional[List[SignatureDetails]] = Field(..., title="", description="Detailed analysis of each signature found.")
+    message: str = Field(..., title="", description="Message indicating the result of the validation.")
+    error: Optional[str] = Field(default=None, title="", description="Error message if the validation failed.")
+
+class UploadCertResponse(BaseModel):
+    success: bool = Field(..., title="", description="True if the certificate was successfully uploaded.")
+    filename: str = Field(..., title="", description="Name of the uploaded certificate file.")
+    overwritten: bool = Field(..., title="", description="True if the certificate was overwritten.")

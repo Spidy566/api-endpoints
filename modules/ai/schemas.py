@@ -1,5 +1,5 @@
-from pydantic import BaseModel, field_validator, Field
-from typing import Union, Dict, List, Any, Optional
+from pydantic import BaseModel, field_validator, Field, ConfigDict
+from typing import Union, Dict, Any, List, Optional
 
 
 class ExtractionRequest(BaseModel):
@@ -29,14 +29,25 @@ class ExtractionRequest(BaseModel):
             raise ValueError("Token must be integer between 1 and 128000")
         return v
 
+    @field_validator('p_api_model')
+    @classmethod
+    def validate_api_model(cls, v: str) -> str:
+        supported_models = [
+            "gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-4-vision-preview",
+            "gpt-4", "gpt-4-32k", "gpt-3.5-turbo", "gpt-3.5-turbo-16k", "gpt-4.1", "gpt-4.1-mini",
+        ]
+        if v not in supported_models:
+            raise ValueError(f"Unsupported model. Supported models: {', '.join(supported_models)}")
+        return v
+
 class ExtractionResponse(BaseModel):
-    template_name: str
-    data: Union[Dict[str, Any], List[Any]]
+    template_name: str = Field(..., title="", description="The template name provided in the request.")
+    model_config = ConfigDict(extra='allow')
 
 class VCScanResponse(BaseModel):
-    success: bool
-    raw_text: str
-    cleaned_text: str
-    parsed_data: Optional[Union[Dict, str]] = None
-    model_used: str
-    error: Optional[str] = None
+    success: bool = Field(..., title="", description="True if the process completed without system errors else False.")
+    raw_text: str = Field(..., title="", description="The raw, unformatted text extracted by the OCR engine.")
+    cleaned_text: str = Field(..., title="", description="Post-processed text (common OCR typos fixed).")
+    parsed_data: Union[Dict[str, Any], List[Any]] = Field(..., title="", description="The structured JSON data extracted by the AI.")
+    model_used: str = Field(..., title="", description="The AI model used for the extraction.")
+    error: Optional[str] = Field(default=None, title="", description="Error message if the AI or OCR failed.")
