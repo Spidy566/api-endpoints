@@ -20,21 +20,15 @@ from core.dependencies import thread_pool_executor
 
 def get_cert_path(name: str) -> Optional[Path]:
     """Finds a .pfx file in the certs directory matching the name."""
-    # 1. Exact match
     cert_path = CERT_DIR / f"{name}.pfx"
-    if cert_path.exists():
-        return cert_path
+    if cert_path.exists(): return cert_path
 
-    # 2. Lowercase match
     cert_path = CERT_DIR / f"{name.lower()}.pfx"
-    if cert_path.exists():
-        return cert_path
+    if cert_path.exists(): return cert_path
 
-    # 3. Snake_case match
     name_safe = name.lower().replace(" ", "_")
     cert_path = CERT_DIR / f"{name_safe}.pfx"
-    if cert_path.exists():
-        return cert_path
+    if cert_path.exists(): return cert_path
 
     return None
 
@@ -74,9 +68,6 @@ def load_pkcs12_certificate(cert_path: Path, password: str):
         logger.error(f"Failed to load certificate: {str(e)}")
         raise
 
-
-# --- Signing Logic ---
-
 def sign_pdf_sync(pdf_data: bytes, cert_info: dict,
                   signer_name: str, reason: str, location: str,
                   visible: bool = True, page: int = -1,
@@ -85,7 +76,6 @@ def sign_pdf_sync(pdf_data: bytes, cert_info: dict,
     """Synchronous function to sign PDF (runs in thread pool)."""
     signed_pdf = None
     try:
-        # Determine page count
         reader = PdfFileReader(BytesIO(pdf_data))
         try:
             page_tree = reader.page_tree
@@ -93,7 +83,6 @@ def sign_pdf_sync(pdf_data: bytes, cert_info: dict,
         except:
             total_pages = reader.root['/Pages']['/Count']
 
-        # Calculate target page
         if page == -1:
             page = total_pages - 1
         elif page > 0:
@@ -116,7 +105,6 @@ def sign_pdf_sync(pdf_data: bytes, cert_info: dict,
             subfilter=SigSeedSubFilter.ADOBE_PKCS7_DETACHED
         )
 
-        # Prepare Writer
         w = IncrementalPdfFileWriter(BytesIO(pdf_data))
 
         if visible:
@@ -127,27 +115,23 @@ def sign_pdf_sync(pdf_data: bytes, cert_info: dict,
             )
             fields.append_signature_field(w, sig_field_spec)
 
-        # Buffer preparation
         prepared_buf = BytesIO()
         w.write(prepared_buf)
         prepared_buf.seek(0)
 
-        # Execute Signing
         try:
-            # Try PyHanko high-level API
             from pyhanko.sign.signers.pdf_signer import sign_pdf
             result = sign_pdf(
                 pdf_in=prepared_buf if visible else BytesIO(pdf_data),
                 signers=[signer],
                 signature_meta=signature_meta,
-                existing_fields_only=visible,  # If visible, we just created the field
+                existing_fields_only=visible,
             )
             if hasattr(result, 'read'):
                 signed_pdf = result.read()
             else:
                 signed_pdf = result
         except (ImportError, AttributeError):
-            # Fallback for older versions or internal API changes
             w2 = IncrementalPdfFileWriter(prepared_buf if visible else BytesIO(pdf_data))
             out = signers.sign_pdf(
                 w2,
@@ -188,9 +172,6 @@ async def sign_pdf_async(pdf_data: bytes, cert_info: dict, request_data: Any):
         request_data.box_height
     )
 
-
-# --- Validation Logic ---
-
 def validate_pdf_content(pdf_bytes: bytes) -> Dict:
     """Validate digital signatures in a PDF."""
     try:
@@ -199,34 +180,57 @@ def validate_pdf_content(pdf_bytes: bytes) -> Dict:
         if not pdf_reader.embedded_signatures:
             return {
                 "has_signatures": False,
+                "signature_count": 0,
+                "signatures": [],
                 "message": "No digital signatures found in PDF"
             }
 
         signatures = []
         for sig_field in pdf_reader.embedded_signatures:
             try:
-                val_result = validation.validate_pdf_signature(
-                    pdf_reader,
-                    sig_field,
-                    validation.StandardVerificationContext()
-                )
+                val_result = validation.validate_pdf_signature(sig_field)
 
-                status_valid = val_result.valid and val_result.intact
+                is_valid = getattr(val_result, 'valid', False)
+                is_intact = getattr(val_result, 'intact', False)
+                is_trusted = getattr(val_result, 'trusted', False)
+
+                status_valid = is_valid and is_intact
+
+                signer_name = "Unknown"
+                cert = getattr(val_result, 'signing_cert', None) or getattr(val_result, 'signer_cert', None)
+
+                if cert:
+                    try:
+                        signer_name = cert.subject.rfc4514_string()
+                    except Exception:
+                        pass
+
+                ts_obj = getattr(val_result, 'timestamp', None)
+                if not ts_obj:
+                    ts_obj = getattr(val_result, 'signer_reported_dt', None)
+
+                timestamp_str = str(ts_obj) if ts_obj else None
 
                 sig_info = {
                     "field_name": sig_field.field_name,
-                    "signer": val_result.signer_cert.subject.rfc4514_string() if val_result.signer_cert else "Unknown",
-                    "valid": val_result.valid,
-                    "trusted": val_result.trusted,
-                    "timestamp": str(val_result.timestamp) if val_result.timestamp else None,
-                    "intact": val_result.intact,
+                    "signer": signer_name,
+                    "valid": is_valid,
+                    "trusted": is_trusted,
+                    "timestamp": timestamp_str,
+                    "intact": is_intact,
                     "status": "Valid" if status_valid else "Invalid",
                     "visual_indicator": "✅ Verified" if status_valid else "❓ Needs Verification"
                 }
                 signatures.append(sig_info)
             except Exception as e:
+                logger.error(f"Validation failed for field {sig_field.field_name}: {e}")
                 signatures.append({
                     "field_name": sig_field.field_name,
+                    "signer": "Unknown",
+                    "valid": False,
+                    "trusted": False,
+                    "intact": False,
+                    "status": "Error",
                     "error": str(e),
                     "visual_indicator": "❓ Error"
                 })
@@ -238,4 +242,10 @@ def validate_pdf_content(pdf_bytes: bytes) -> Dict:
             "message": "Signatures found and validated"
         }
     except Exception as e:
-        return {"error": str(e)}
+        return {
+            "has_signatures": False,
+            "signature_count": 0,
+            "signatures": [],
+            "error": str(e),
+            "message": "Error reading PDF"
+        }

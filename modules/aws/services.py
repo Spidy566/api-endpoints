@@ -3,6 +3,7 @@ import time
 import uuid
 from typing import Dict, Any
 from fastapi import HTTPException
+from botocore.exceptions import ClientError
 from core.config import BUCKET, logger
 from core.dependencies import s3_client, textract_client
 
@@ -164,8 +165,14 @@ def parse_vendor_invoice_response(job_id: str) -> Dict:
             response = textract_client.get_document_analysis(JobId=job_id, NextToken=token)
             pages.append(response)
             token = response.get("NextToken", None)
+    except ClientError as e:
+        code = e.response['Error']['Code']
+        msg = e.response['Error']['Message']
+        if code == 'InvalidJobIdException':
+            raise HTTPException(status_code=404, detail=f"Job ID not found: {msg}")
+        raise HTTPException(status_code=400, detail=f"AWS Error: {msg}")
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Textract retrieval failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Processing failed: {str(e)}")
 
     block_map = {}
     key_map = {}

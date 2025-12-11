@@ -1,4 +1,3 @@
-import os
 from collections import defaultdict
 from pathlib import Path
 from fastapi import HTTPException, Request

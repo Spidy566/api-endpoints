@@ -2,6 +2,7 @@ import base64
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Path
 from fastapi.responses import JSONResponse
+from botocore.exceptions import ClientError
 
 from core.config import BUCKET, logger
 from core.dependencies import s3_client, textract_client
@@ -36,9 +37,15 @@ async def upload_pdf(request: Request):
 
         logger.info(f"Uploaded file to S3: s3://{BUCKET}/{filename}")
         return {"success": True, "file_name": filename, "bucket": BUCKET}
+    except ClientError as e:
+        code = e.response['Error']['Code']
+        msg = e.response['Error']['Message']
+        logger.error(f"S3 Upload Error: {code} - {msg}")
+        raise HTTPException(status_code=400, detail=f"S3 Error: {msg}")
+
     except Exception as e:
-        logger.error(f"Upload failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Upload failed: {str(e)}")
+        logger.error(f"Upload failed: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post(
     "/textract/aws_start_expense",
@@ -52,8 +59,28 @@ def start_expense_analysis(req: schemas.TextractStartRequest):
             DocumentLocation={"S3Object": {"Bucket": req.bucket, "Name": req.file_name}}
         )
         return {"JobId": response["JobId"]}
+
+    except ClientError as e:
+        code = e.response['Error']['Code']
+        msg = e.response['Error']['Message']
+        logger.error(f"AWS Expense Start Error: {code} - {msg}")
+
+        if code == 'InvalidS3ObjectException':
+            raise HTTPException(
+                status_code=404,
+                detail=f"File '{req.file_name}' not found in bucket '{req.bucket}'."
+            )
+        elif code == 'InvalidParameterException':
+            raise HTTPException(status_code=400, detail=f"Invalid Parameters: {msg}")
+        elif code == 'UnsupportedDocumentException':
+            raise HTTPException(status_code=400, detail="File format not supported by Textract.")
+        elif code == 'AccessDeniedException':
+            raise HTTPException(status_code=403, detail="Access Denied to S3 Object.")
+
+        raise HTTPException(status_code=400, detail=f"AWS Error: {msg}")
+
     except Exception as e:
-        logger.error(f"ExpenseAnalysis start failed: {str(e)}")
+        logger.error(f"Start Expense Failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get(
@@ -63,7 +90,15 @@ def start_expense_analysis(req: schemas.TextractStartRequest):
     response_model=schemas.ExpenseResponse
 )
 def get_expense_invoice_data(job_id: str = Path(..., title="", description="The Job ID returned by the 'start_expense' endpoint.")):
-    return services.parse_expense_response(job_id)
+    try:
+        return services.parse_expense_response(job_id)
+    except HTTPException:
+        raise
+    except ClientError as e:
+        code = e.response['Error']['Code']
+        if code == 'InvalidJobIdException':
+            raise HTTPException(status_code=404, detail=f"Job ID '{job_id}' not found.")
+        raise HTTPException(status_code=400, detail=f"AWS Error: {e.response['Error']['Message']}")
 
 @router.post(
     "/textract/aws_start_document",
@@ -78,8 +113,28 @@ def start_textract(req: schemas.TextractStartRequest):
             FeatureTypes=["FORMS", "TABLES"]
         )
         return {"JobId": response["JobId"]}
+
+    except ClientError as e:
+        code = e.response['Error']['Code']
+        msg = e.response['Error']['Message']
+        logger.error(f"AWS Document Start Error: {code} - {msg}")
+
+        if code == 'InvalidS3ObjectException':
+            raise HTTPException(
+                status_code=404,
+                detail=f"File '{req.file_name}' not found in bucket '{req.bucket}'."
+            )
+        elif code == 'InvalidParameterException':
+            raise HTTPException(status_code=400, detail=f"Invalid Parameters: {msg}")
+        elif code == 'UnsupportedDocumentException':
+            raise HTTPException(status_code=400, detail="File format not supported by Textract.")
+        elif code == 'AccessDeniedException':
+            raise HTTPException(status_code=403, detail="Access Denied to S3 Object.")
+
+        raise HTTPException(status_code=400, detail=f"AWS Error: {msg}")
+
     except Exception as e:
-        logger.error(f"Textract start failed: {str(e)}")
+        logger.error(f"Start Document Failed: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 @router.get(
@@ -89,8 +144,20 @@ def start_textract(req: schemas.TextractStartRequest):
     response_model=schemas.StatusResponse
 )
 def get_status(job_id: str = Path(..., title="", description="The Job ID returned by the 'start_document' endpoint.")):
-    result = textract_client.get_document_analysis(JobId=job_id)
-    return {"JobStatus": result["JobStatus"]}
+    try:
+        result = textract_client.get_document_analysis(JobId=job_id)
+        return {"JobStatus": result["JobStatus"]}
+    except ClientError as e:
+        code = e.response['Error']['Code']
+        message = e.response['Error']['Message']
+
+        if code == 'InvalidJobIdException':
+            raise HTTPException(status_code=404, detail=f"Job ID not found: {message}")
+        raise HTTPException(status_code=400, detail=f"AWS Error: {message}")
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get(
     "/textract/aws_get_document_result/{job_id}",
@@ -99,15 +166,26 @@ def get_status(job_id: str = Path(..., title="", description="The Job ID returne
     response_model=schemas.RawTextractResponse
 )
 def get_result(job_id: str = Path(..., title="", description="The Job ID returned by the 'start_document' endpoint.")):
-    pages = []
-    response = textract_client.get_document_analysis(JobId=job_id)
-    pages.append(response)
-    token = response.get("NextToken", None)
-    while token:
-        response = textract_client.get_document_analysis(JobId=job_id, NextToken=token)
+    try:
+        pages = []
+        response = textract_client.get_document_analysis(JobId=job_id)
         pages.append(response)
         token = response.get("NextToken", None)
-    return {"pages": pages}
+        while token:
+            response = textract_client.get_document_analysis(JobId=job_id, NextToken=token)
+            pages.append(response)
+            token = response.get("NextToken", None)
+        return {"pages": pages}
+    except ClientError as e:
+        code = e.response['Error']['Code']
+        message = e.response['Error']['Message']
+
+        if code == 'InvalidJobIdException':
+            raise HTTPException(status_code=404, detail=f"Job ID '{job_id}' does not exist or has expired.")
+        raise HTTPException(status_code=400, detail=f"AWS Error: {message}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 @router.get(
     "/textract/aws_get_document/{job_id}",
@@ -116,7 +194,17 @@ def get_result(job_id: str = Path(..., title="", description="The Job ID returne
     response_model=schemas.VendorInvoiceResponse
 )
 def get_vendor_invoice_data(job_id: str = Path(..., title="", description="The Job ID returned by the 'start_document' endpoint.")):
-    return services.parse_vendor_invoice_response(job_id)
+    try:
+        return services.parse_vendor_invoice_response(job_id)
+    except HTTPException:
+        raise
+    except ClientError as e:
+        code = e.response['Error']['Code']
+        if code == 'InvalidJobIdException':
+            raise HTTPException(status_code=404, detail=f"Job ID '{job_id}' not found.")
+        raise HTTPException(status_code=400, detail=f"AWS Error: {e.response['Error']['Message']}")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @router.post(
     '/manifest_extract',
@@ -131,6 +219,8 @@ async def extract_manifest(file: UploadFile = File(..., title="", description="T
         content = await file.read()
         data = services.CargoManifestExtractor().extract_manifest_data(content, file.content_type)
         return JSONResponse(content=data)
+    except ClientError as e:
+        raise HTTPException(status_code=400, detail=f"AWS Error: {e.response['Error']['Message']}")
     except Exception as e:
         logger.error("Error extracting manifest: %s", e, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Extraction failed: {e}")

@@ -10,8 +10,7 @@ router = APIRouter()
     response_model=schemas.BackupUploadResponse,
 )
 async def upload_backup_file(file: UploadFile = File(..., title="",  description="The binary file to upload.")):
-    saved_path = services.save_backup_file(file)
-    return {"success": True, "file_path": saved_path}
+    return services.save_backup_file(file)
 
 
 @router.post(

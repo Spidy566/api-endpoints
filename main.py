@@ -6,6 +6,10 @@ from datetime import datetime
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse
+from fastapi.openapi.utils import get_openapi
+from fastapi.staticfiles import StaticFiles
+from fastapi.exceptions import ResponseValidationError
+from fastapi.responses import JSONResponse
 
 from core.config import logger, LOGS_DIR, CERT_DIR
 from core.dependencies import process_pool_executor, thread_pool_executor
@@ -43,34 +47,13 @@ async def lifespan(app: FastAPI):
     print("--- [FastAPI] Cleanup complete ---")
 
 tags_metadata = [
-    {
-        "name": "AI",
-        "description": "Integration with **OpenAI** models for intelligent document extraction, visiting card scanning, and generic OCR tasks.",
-    },
-    {
-        "name": "AWS",
-        "description": "Integration with **AWS S3** for storage and **AWS Textract** for enterprise-grade OCR. Includes specific parsers for Vendor Invoices, Expenses, and Cargo Manifests.",
-    },
-    {
-        "name": "Signature",
-        "description": "Adobe-compatible **Digital Signature** services. Supports PFX certificates, visible/invisible signing, and validation.",
-    },
-    {
-        "name": "Documents",
-        "description": "Utilities for PDF merging, report generation (DOCX templating), and file conversion.",
-    },
-    {
-        "name": "Email",
-        "description": "Tools to parse email files (.eml/.msg), extract attachments, and send emails via SMTP.",
-    },
-    {
-        "name": "Backup",
-        "description": "Simple file backup and retrieval endpoints.",
-    },
-    {
-        "name": "Logs",
-        "description": "Access to API request/response logs for auditing and debugging.",
-    },
+    {"name": "AI", "description": "Integration with **OpenAI** models for intelligent document extraction, visiting card scanning, and generic OCR tasks."},
+    {"name": "AWS", "description": "Integration with **AWS S3** for storage and **AWS Textract** for enterprise-grade OCR. Includes specific parsers for Vendor Invoices, Expenses, and Cargo Manifests."},
+    {"name": "Signature", "description": "Adobe-compatible **Digital Signature** services. Supports PFX certificates, visible/invisible signing, and validation."},
+    {"name": "Documents", "description": "Utilities for PDF merging, report generation (DOCX templating), and file conversion."},
+    {"name": "Email", "description": "Tools to parse email files (.eml/.msg), extract attachments, and send emails via SMTP."},
+    {"name": "Backup", "description": "Simple file backup and retrieval endpoints."},
+    {"name": "Logs", "description": "Access to API request/response logs for auditing and debugging."},
 ]
 
 app = FastAPI(
@@ -83,6 +66,23 @@ app = FastAPI(
     openapi_tags=tags_metadata,
     lifespan=lifespan
 )
+
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+@app.exception_handler(ResponseValidationError)
+async def validation_exception_handler(request: Request, exc: ResponseValidationError):
+    """
+    Overrides the default 500 error for validation failures.
+    Returns 500 but with details on exactly which field failed validation.
+    """
+    logger.error(f"Response Validation Error: {exc.errors()}")
+    return JSONResponse(
+        status_code=500,
+        content={
+            "message": "Server Response Validation Failed",
+            "details": exc.errors()
+        }
+    )
 
 app.add_middleware(
     CORSMiddleware,
@@ -162,7 +162,7 @@ app.include_router(logs_routes.router, tags=["Logs"])
 app.include_router(signature_routes.router, tags=["Signature"])
 
 
-@app.get("/")
+@app.get("/", include_in_schema=False)
 async def root():
     cert_count = len(list(CERT_DIR.glob("*.pfx")))
     return {
@@ -183,7 +183,40 @@ async def root():
     }
 
 
-# Custom ReDoc Endpoint
+def custom_openapi():
+    """
+    Generates the OpenAPI schema but removes the automatic '422 Validation Error'
+    responses from the documentation to keep ReDoc clean.
+    """
+    if app.openapi_schema:
+        return app.openapi_schema
+
+    openapi_schema = get_openapi(
+        title=app.title,
+        version=app.version,
+        description=app.description,
+        routes=app.routes,
+        tags=tags_metadata,
+    )
+
+    openapi_schema["info"]["x-logo"] = {
+        "url": "/static/Fresa-Tech-logo.png",
+        "backgroundColor": "#FFFFFF",
+        "altText": "Fresa Logo",
+        "href": "https://fresatechnologies.com/"
+    }
+
+    for path, methods in openapi_schema["paths"].items():
+        for method, content in methods.items():
+            if "responses" in content and "422" in content["responses"]:
+                del content["responses"]["422"]
+
+    app.openapi_schema = openapi_schema
+    return app.openapi_schema
+
+
+app.openapi = custom_openapi
+
 @app.get("/redoc", include_in_schema=False)
 async def custom_redoc():
     html_content = """

@@ -1,11 +1,13 @@
 import base64
 import binascii
+import asyncio
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 
 from core.config import logger, CERT_DIR
+from core.dependencies import thread_pool_executor
 from modules.signature import schemas, services
 
 router = APIRouter()
@@ -22,7 +24,6 @@ async def sign_invoice(request: schemas.InvoiceSignRequest):
     logger.info(f"Digital signature request for: {request.name}")
 
     try:
-        # 1. Decode Base64
         try:
             pdf_data = base64.b64decode(request.invoice_pdf_base64, validate=True)
             if not pdf_data.startswith(b'%PDF'):
@@ -31,7 +32,6 @@ async def sign_invoice(request: schemas.InvoiceSignRequest):
             logger.error(f"Invalid PDF/Base64: {str(e)}")
             return JSONResponse(status_code=400, content={"error": f"Invalid PDF data: {str(e)}"})
 
-        # 2. Check Certificate
         cert_path = services.get_cert_path(request.name)
         if not cert_path:
             logger.warning(f"Certificate not found for name: {request.name}")
@@ -40,17 +40,14 @@ async def sign_invoice(request: schemas.InvoiceSignRequest):
                 error="Invalid name (Certificate not found)"
             )
 
-        # 3. Validate Username Match
         if request.username is not None and request.username != request.name:
             return schemas.InvoiceSignResponse(
                 signed_pdf_base64=request.invoice_pdf_base64,
                 auth_error="Invalid username"
             )
 
-        # 4. Load Certificate (Verify Password)
         try:
             cert_info = services.load_pkcs12_certificate(cert_path, request.password)
-            # Add metadata needed for service
             cert_info['cert_path'] = cert_path
             cert_info['password'] = request.password
         except Exception:
@@ -60,7 +57,6 @@ async def sign_invoice(request: schemas.InvoiceSignRequest):
                 error="Invalid password"
             )
 
-        # 5. Sign PDF (Async execution)
         try:
             signed_pdf = await services.sign_pdf_async(pdf_data, cert_info, request)
 
@@ -99,11 +95,19 @@ async def validate_signature(request: schemas.ValidationRequest):
     """Validate an existing signed PDF."""
     try:
         pdf_data = base64.b64decode(request.signed_pdf_base64, validate=True)
-        result = services.validate_pdf_content(pdf_data)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            thread_pool_executor,
+            services.validate_pdf_content,
+            pdf_data
+        )
         return result
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
+        return {
+            "has_signatures": False,
+            "error": str(e),
+            "message": "Validation process failed."
+        }
 
 @router.post(
     "/upload_certificate",

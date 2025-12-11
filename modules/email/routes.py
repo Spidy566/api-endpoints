@@ -127,7 +127,7 @@ async def extract_attachments_base64(request: schemas.EmailBase64Request):
     response_model=schemas.SendEmailResponse,
 )
 async def send_email_endpoint(request: schemas.EmailRequest):
-    success, message = services.send_email_logic(request.SmtpConfig, request.Message)
+    success, message = services.send_email_logic(request.smtp_config, request.message)
 
     if success:
         return {"status": "success", "message": message}
