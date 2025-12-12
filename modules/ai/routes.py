@@ -30,10 +30,15 @@ async def openai_extract(request: schemas.ExtractionRequest):
         logger.info(f"Processing request for template: {request.p_template_name}")
 
         result = services.process_with_openai(
-            request.p_api_key, request.p_api_model,
-            request.p_template_prompt_header, request.p_template_prompt_details,
-            file_content, request.p_api_token, request.p_temperature,
-            request.p_top_p, request.p_timeout
+            request.p_api_key,
+            request.p_api_model,
+            request.p_template_prompt_header,
+            request.p_template_prompt_details,
+            file_content,
+            request.p_api_token,
+            request.p_temperature,
+            request.p_top_p,
+            request.p_timeout
         )
 
         logger.info(f"OpenAI processing result: success={result['success']}")
@@ -58,7 +63,7 @@ async def openai_extract(request: schemas.ExtractionRequest):
                 }
         else:
             logger.error(f"OpenAI processing failed: {result['error']}")
-            raise HTTPException(status_code=500, detail=result["error"])
+            raise HTTPException(status_code=502, detail=f"OpenAI Error: {result.get('error')}")
 
     except HTTPException:
         raise
@@ -81,60 +86,55 @@ async def scan_visiting_card(
     temp_path = None
     try:
         file_bytes = await file.read()
-        if not file_bytes or len(file_bytes) < 10:
-            raise HTTPException(status_code=400, detail="Empty file or too small")
+        if len(file_bytes) < 10:
+            raise HTTPException(status_code=400, detail="File is empty or too small.")
 
-        temp_path = utils.to_temp_image(
-            file_bytes,
-            file.content_type or "",
-            file.filename or "upload"
-        )
+        try:
+            temp_path = utils.to_temp_image(
+                file_bytes,
+                file.content_type or "",
+                file.filename or "upload"
+            )
+        except Exception as e:
+            raise HTTPException(status_code=400, detail=f"Invalid image format: {str(e)}")
 
         raw_text = utils.ocr_extract_card(temp_path)
-        cleaned_text = utils.clean_card_text(raw_text)
+        clean_text = utils.clean_card_text(raw_text)
 
-        if not cleaned_text.strip():
-            return {
-                "success": False,
-                "message": "No readable text found via OCR.",
-                "raw_text": raw_text,
-                "cleaned_text": cleaned_text,
-            }
+        if len(clean_text) < 5:
+            raise HTTPException(status_code=422, detail="OCR failed to detect readable text.")
 
         key = api_key or os.getenv("OPENAI_API_KEY")
         if not key:
-            raise HTTPException(
-                status_code=400,
-                detail="OpenAI API key not provided (form api_key or env OPENAI_API_KEY)"
-            )
+            raise HTTPException(status_code=401, detail="Missing OpenAI API Key.")
 
-        result = services.extract_card_json_with_openai(key, model, raw_text, cleaned_text)
+        result = services.extract_card_json_with_openai(key, model, raw_text, clean_text)
 
         if isinstance(result, dict) and "error" in result:
-            return {
-                "success": False,
-                "raw_text": raw_text,
-                "cleaned_text": cleaned_text,
-                "error": result.get("error"),
-                "raw": result.get("raw"),
-                "model_used": model,
-            }
+            error_msg = str(result["error"]).lower()
+            if "invalid api key" in error_msg or "authentication" in error_msg:
+                raise HTTPException(status_code=401, detail=f"OpenAI Auth Error: {result['error']}")
+            elif "model" in error_msg and "not found" in error_msg:
+                raise HTTPException(status_code=404, detail=f"OpenAI Model Error: {result['error']}")
+            elif "rate limit" in error_msg:
+                raise HTTPException(status_code=429, detail="OpenAI Rate Limit Exceeded.")
+            else:
+                raise HTTPException(status_code=502, detail=f"OpenAI Processing Failed: {result['error']}")
 
         return {
             "success": True,
             "raw_text": raw_text,
-            "cleaned_text": cleaned_text,
+            "cleaned_text": clean_text,
             "parsed_data": result,
+            "error": None,
             "model_used": model,
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Visiting card scan error: {str(e)}")
+        logger.error(f"VC Scan Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Processing Error: {str(e)}")
     finally:
-        try:
-            if temp_path and os.path.exists(temp_path):
-                os.remove(temp_path)
-        except Exception:
-            pass
+        if temp_path and os.path.exists(temp_path):
+            os.remove(temp_path)

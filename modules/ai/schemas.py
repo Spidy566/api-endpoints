@@ -48,6 +48,6 @@ class VCScanResponse(BaseModel):
     success: bool = Field(..., title="", description="True if the process completed without system errors else False.")
     raw_text: str = Field(..., title="", description="The raw, unformatted text extracted by the OCR engine.")
     cleaned_text: str = Field(..., title="", description="Post-processed text (common OCR typos fixed).")
-    parsed_data: Union[Dict[str, Any], List[Any]] = Field(..., title="", description="The structured JSON data extracted by the AI.")
+    parsed_data: Union[Dict[str, Any], List[Any]] = Field(default=None, title="", description="The structured JSON data extracted by the AI.")
     model_used: str = Field(..., title="", description="The AI model used for the extraction.")
     error: Optional[str] = Field(default=None, title="", description="Error message if the AI or OCR failed.")

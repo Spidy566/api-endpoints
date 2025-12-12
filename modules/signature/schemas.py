@@ -33,20 +33,20 @@ class InvoiceSignResponse(BaseModel):
 
 class SignatureDetails(BaseModel):
     field_name: str = Field(..., title="", description="Name of the signature field.")
-    signer: str = Field(..., title="", description="Name of the signer.")
-    valid: bool = Field(..., title="", description="Whether the signature is valid.")
-    trusted: bool = Field(..., title="", description="Whether the signer is trusted.")
+    signer: Optional[str] = Field(default="Unknown", title="", description="Name of the signer.")
+    valid: Optional[bool] = Field(default=False, title="", description="Whether the signature is valid.")
+    trusted: Optional[bool] = Field(default=False, title="", description="Whether the signer is trusted.")
     timestamp: Optional[str] = Field(default=None, title="", description="Timestamp of the signature.")
-    intact: bool = Field(..., title="", description="True if the document has not been modified since signing.")
-    status: str = Field(..., title="", description="Status of the signature validation.")
+    intact: Optional[bool] = Field(default=False, title="", description="True if the document has not been modified since signing.")
+    status: Optional[str] = Field(default="Unknown", title="", description="Status of the signature validation.")
     visual_indicator: str = Field(..., title="", description="Visual indicator of the signature status.")
     error: Optional[str] = Field(default=None, title="", description="Error message if the signature validation failed.")
 
 class ValidationResponse(BaseModel):
     has_signatures: bool = Field(..., title="", description="True if the PDF contains embedded signatures.")
-    signature_count: int = Field(..., title="", description="Number of embedded signatures in the PDF.")
-    signatures: Optional[List[SignatureDetails]] = Field(..., title="", description="Detailed analysis of each signature found.")
-    message: str = Field(..., title="", description="Message indicating the result of the validation.")
+    signature_count: Optional[int] = Field(default=0, title="", description="Number of embedded signatures in the PDF.")
+    signatures: Optional[List[SignatureDetails]] = Field(default=[], title="", description="Detailed analysis of each signature found.")
+    message: Optional[str] = Field(default=None, title="", description="Message indicating the result of the validation.")
     error: Optional[str] = Field(default=None, title="", description="Error message if the validation failed.")
 
 class UploadCertResponse(BaseModel):

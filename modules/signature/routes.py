@@ -4,14 +4,12 @@ import asyncio
 from datetime import datetime
 
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse
 
 from core.config import logger, CERT_DIR
 from core.dependencies import thread_pool_executor
 from modules.signature import schemas, services
 
 router = APIRouter()
-
 
 
 @router.post(
@@ -29,21 +27,22 @@ async def sign_invoice(request: schemas.InvoiceSignRequest):
             if not pdf_data.startswith(b'%PDF'):
                 raise ValueError("Missing PDF header")
         except (binascii.Error, ValueError) as e:
-            logger.error(f"Invalid PDF/Base64: {str(e)}")
-            return JSONResponse(status_code=400, content={"error": f"Invalid PDF data: {str(e)}"})
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid PDF Data: {str(e)}"
+            )
 
         cert_path = services.get_cert_path(request.name)
         if not cert_path:
-            logger.warning(f"Certificate not found for name: {request.name}")
-            return schemas.InvoiceSignResponse(
-                signed_pdf_base64=request.invoice_pdf_base64,
-                error="Invalid name (Certificate not found)"
+            raise HTTPException(
+                status_code=404,
+                detail=f"Certificate for '{request.name}' not found on server."
             )
 
         if request.username is not None and request.username != request.name:
-            return schemas.InvoiceSignResponse(
-                signed_pdf_base64=request.invoice_pdf_base64,
-                auth_error="Invalid username"
+            raise HTTPException(
+                status_code=401,
+                detail=f"Username mismatch: '{request.username}' does not match certificate name '{request.name}'."
             )
 
         try:
@@ -52,14 +51,13 @@ async def sign_invoice(request: schemas.InvoiceSignRequest):
             cert_info['password'] = request.password
         except Exception:
             logger.warning(f"Invalid password for certificate: {request.name}")
-            return schemas.InvoiceSignResponse(
-                signed_pdf_base64=request.invoice_pdf_base64,
-                error="Invalid password"
+            raise HTTPException(
+                status_code=401,
+                detail="Invalid password or corrupted certificate file."
             )
 
         try:
             signed_pdf = await services.sign_pdf_async(pdf_data, cert_info, request)
-
             signed_pdf_base64 = base64.b64encode(signed_pdf).decode('utf-8')
 
             signature_info = {
@@ -67,22 +65,25 @@ async def sign_invoice(request: schemas.InvoiceSignRequest):
                 "organization": cert_info['organization'],
                 "timestamp": datetime.now().isoformat(),
                 "reason": request.reason,
-                "verification_status": "Signature created - Click signature field to verify"
+                "verification_status": "Signature created successfully"
             }
 
-            logger.info(f"✓ Digital signature completed successfully for {request.name}")
-            return schemas.InvoiceSignResponse(
-                signed_pdf_base64=signed_pdf_base64,
-                signature_info=signature_info
-            )
+            return {
+                "signed_pdf_base64": signed_pdf_base64,
+                "signature_info": signature_info,
+                "error": None,
+                "auth_error": None
+            }
 
         except Exception as e:
             logger.error(f"Internal signing error: {str(e)}")
-            return JSONResponse(status_code=500, content={"error": f"Internal signing error: {str(e)}"})
+            raise HTTPException(status_code=500,detail=f"Signing process failed: {str(e)}")
 
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Unexpected error: {str(e)}")
-        return JSONResponse(status_code=500, content={"error": f"Unexpected server error: {str(e)}"})
+        raise HTTPException(status_code=500,detail=f"Unexpected server error: {str(e)}")
 
 
 @router.post(
@@ -94,20 +95,31 @@ async def sign_invoice(request: schemas.InvoiceSignRequest):
 async def validate_signature(request: schemas.ValidationRequest):
     """Validate an existing signed PDF."""
     try:
-        pdf_data = base64.b64decode(request.signed_pdf_base64, validate=True)
+        try:
+            pdf_data = base64.b64decode(request.signed_pdf_base64, validate=True)
+        except (binascii.Error, ValueError) as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid Base64 string: {str(e)}"
+            )
         loop = asyncio.get_running_loop()
         result = await loop.run_in_executor(
             thread_pool_executor,
             services.validate_pdf_content,
             pdf_data
         )
+        if result.get("error") and "No digital signatures" not in str(result.get("message", "")):
+            if "EOF marker" in str(result.get("error")) or "not a PDF" in str(result.get("error")):
+                raise HTTPException(status_code=400, detail=f"Corrupted PDF: {result['error']}")
         return result
+    except HTTPException:
+        raise
     except Exception as e:
-        return {
-            "has_signatures": False,
-            "error": str(e),
-            "message": "Validation process failed."
-        }
+        logger.error(f"Unexpected server error: {e}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Unexpected server error: {str(e)}"
+        )
 
 @router.post(
     "/upload_certificate",

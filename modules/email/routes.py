@@ -1,4 +1,5 @@
 import base64
+import binascii
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from core.config import logger
 from modules.email import schemas, services
@@ -102,14 +103,22 @@ async def extract_attachments(file: UploadFile = File(..., title="", description
 async def extract_attachments_base64(request: schemas.EmailBase64Request):
     """Extract attachments from base64 EML/MSG input."""
     try:
-        file_content = base64.b64decode(request.file_base64)
+        try:
+            file_content = base64.b64decode(request.file_base64, validate=True)
+        except (binascii.Error, ValueError) as e:
+            raise HTTPException(
+                status_code=400,
+                detail=f"Invalid Base64 string: {str(e)}"
+            )
         extractor = services.EmailAttachmentExtractor()
+
         if request.file_type.lower() == 'eml':
             attachments = extractor.extract_from_eml(file_content)
         elif request.file_type.lower() == 'msg':
             attachments = extractor.extract_from_msg(file_content)
         else:
             raise HTTPException(status_code=400, detail="Invalid file_type. Use 'eml' or 'msg'.")
+
         return {
             'success': True,
             'file_type': request.file_type,
@@ -117,8 +126,11 @@ async def extract_attachments_base64(request: schemas.EmailBase64Request):
             'total_attachments': len(attachments),
             'attachments': attachments
         }
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Extraction failed: {str(e)}")
+        logger.error(f"Extraction crash: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
 @router.post(
     "/send_mail_using_customer_server",
@@ -132,5 +144,20 @@ async def send_email_endpoint(request: schemas.EmailRequest):
     if success:
         return {"status": "success", "message": message}
     else:
-        return {"status": "error", "message": message}
+        status_code = 500
+
+        lower_msg = message.lower()
+        if "decryption error" in lower_msg:
+            status_code = 400
+        elif "authentication failed" in lower_msg:
+            status_code = 401
+        elif "network" in lower_msg or "connection" in lower_msg:
+            status_code = 502
+        elif "configuration error" in lower_msg:
+            status_code = 500
+
+        raise HTTPException(
+            status_code=status_code,
+            detail=message
+        )
 

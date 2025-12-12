@@ -14,6 +14,7 @@ class CargoManifestExtractor:
     """
     def __init__(self):
         self.client = textract_client
+        self.s3_client = s3_client
 
     def extract_manifest_data(self, document_bytes: bytes, content_type: str) -> Dict[str, Any]:
         min_conf = 85.0
@@ -122,9 +123,18 @@ def parse_expense_response(job_id: str) -> Dict:
             response = textract_client.get_expense_analysis(JobId=job_id, NextToken=token)
             pages.append(response)
             token = response.get("NextToken", None)
+    except ClientError as e:
+        code = e.response['Error']['Code']
+        msg = e.response['Error']['Message']
+        logger.error(f"AWS Error: {code} - {msg}")
+
+        if code == 'InvalidJobIdException':
+            raise HTTPException(status_code=404, detail=f"Job ID '{job_id}' not found.")
+        raise HTTPException(status_code=400, detail=f"AWS Error: {msg}")
+
     except Exception as e:
-        logger.error(f"ExpenseAnalysis retrieval failed: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Textract retrieval failed: {str(e)}")
+        logger.error(f"Expense fetch failed: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {str(e)}")
 
     extracted_data = {
         "summary_fields": [],
@@ -248,7 +258,6 @@ def parse_vendor_invoice_response(job_id: str) -> Dict:
         else:
             charges_table.extend(table_data)
 
-    # Remove duplicates
     seen = set()
     deduped_charges = []
     for row in charges_table:

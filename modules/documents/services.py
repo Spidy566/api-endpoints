@@ -1,18 +1,15 @@
 import io
 import os
 import uuid
-import json
 import base64
-import time
 import signal
 import subprocess
 import tempfile
-from datetime import datetime
 from PIL import Image
 from pypdf import PdfWriter, PdfReader
-from docxtpl import DocxTemplate, RichText
+from docxtpl import DocxTemplate
 
-from core.config import logger, OUTPUT_DIR
+from core.config import logger
 
 
 def generate_docx(template_bytes: bytes, context: dict) -> bytes:
@@ -93,14 +90,15 @@ def merge_files_logic(files: list[dict]) -> dict:
             base64content = file_info.get("base64content", "")
 
             if not base64content:
-                raise ValueError(status_code=400, detail=f"Missing base64content for {filename}")
+                raise ValueError(f"Missing base64content for {filename}")
 
             try:
                 file_bytes = base64.b64decode(base64content.strip().split(",")[-1])
             except Exception:
-                raise ValueError(status_code=400, detail=f"Invalid base64 data in {filename}")
+                raise ValueError(f"Invalid base64 data in {filename}")
 
-            temp_pdf_path = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf").name
+            fd, temp_pdf_path = tempfile.mkstemp(suffix=".pdf")
+            os.close(fd)
 
             if mimetype == supported_pdf_type or file_bytes[:4] == b"%PDF":
                 with open(temp_pdf_path, "wb") as f:
@@ -111,8 +109,8 @@ def merge_files_logic(files: list[dict]) -> dict:
                     image_pdf = convert_image_to_pdf(file_bytes)
                     with open(temp_pdf_path, "wb") as f:
                         f.write(image_pdf.read())
-                except Exception:
-                    raise ValueError(status_code=400, detail=f"Invalid image format in {filename}")
+                except Exception as e:
+                    raise ValueError(f"Invalid image format in {filename}: {str(e)}")
 
             else:
                 raise ValueError(f"Unsupported file type '{mimetype}' for file '{filename}'.")
@@ -129,30 +127,18 @@ def merge_files_logic(files: list[dict]) -> dict:
         pdf_writer.write(output_pdf)
         output_pdf.seek(0)
 
-        for temp_file in temp_pdfs:
-            try:
-                os.remove(temp_file)
-            except Exception:
-                pass
-
         merged_base64 = base64.b64encode(output_pdf.getvalue()).decode("utf-8")
 
-        output_data = {
+        return {
             "outputfilename": "merged_output.pdf",
             "outputmimetype": "application/pdf",
             "outputbase64content": merged_base64
         }
 
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        output_file_path = os.path.join("output", f"merged_output_{timestamp}.txt")
-        with open(output_file_path, "w", encoding="utf-8") as f:
-            json.dump(output_data, f, indent=2)
-
-        return output_data
-
-    except ValueError:
-        raise
-    except Exception as e:
-        raise ValueError(status_code=500, detail=f"Error merging files: {e}")
-
-
+    finally:
+        for temp_file in temp_pdfs:
+            try:
+                if os.path.exists(temp_file):
+                    os.remove(temp_file)
+            except Exception:
+                pass

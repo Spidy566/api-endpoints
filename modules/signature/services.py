@@ -1,7 +1,7 @@
 import asyncio
 from io import BytesIO
 from pathlib import Path
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any
 
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.x509.oid import NameOID
@@ -201,9 +201,15 @@ def validate_pdf_content(pdf_bytes: bytes) -> Dict:
 
                 if cert:
                     try:
-                        signer_name = cert.subject.rfc4514_string()
-                    except Exception:
-                        pass
+                        cn_attributes = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+                        if cn_attributes:
+                            signer_name = cn_attributes[0].value
+                        else:
+                            o_attributes = cert.subject.get_attributes_for_oid(NameOID.ORGANIZATION_NAME)
+                            signer_name = o_attributes[0].value if o_attributes else cert.subject.rfc4514_string()
+                    except Exception as e:
+                        logger.warning(f"Name extraction failed: {e}")
+                        signer_name = "Unknown"
 
                 ts_obj = getattr(val_result, 'timestamp', None)
                 if not ts_obj:

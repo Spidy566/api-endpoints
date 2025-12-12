@@ -110,4 +110,4 @@ async def merge_base64_json(files: list[schemas.MergeFileItem] = Body(..., title
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
         logger.error(f"Error merging files: {e}")
-        raise HTTPException(status_code=500, detail=f"Error merging files: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal Server Error: {e}")

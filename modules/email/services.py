@@ -12,8 +12,9 @@ from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
 import extract_msg
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-from core.config import logger, ALLOWED_EXTENSIONS
+from core.config import logger, ALLOWED_EXTENSIONS, SHARED_SECRET_KEY
 from modules.email.schemas import SmtpConfig, EmailMessage
 
 def allowed_file(filename):
@@ -346,9 +347,28 @@ def send_email_logic(smtp_config: SmtpConfig, email_message: EmailMessage) -> tu
     raw_recipients = email_message.To + (email_message.Cc or []) + (email_message.Bcc or [])
     all_recipients = [str(r) for r in raw_recipients]
 
+    try:
+        encrypted_password_hex = smtp_config.Password.get_secret_value()
+        key_bytes = SHARED_SECRET_KEY.encode('utf-8').ljust(32, b'0')
+
+        data = bytes.fromhex(encrypted_password_hex)
+
+        if len(data) < 28:
+            return False, "Decryption Error: Payload too short (must be at least 28 bytes)."
+
+        iv = data[:12]
+        ciphertext_and_tag = data[12:]
+        aesgcm = AESGCM(key_bytes)
+        decrypted_bytes = aesgcm.decrypt(iv, ciphertext_and_tag, None)
+        password = decrypted_bytes.decode('utf-8')
+
+    except binascii.Error:
+        return False, "Decryption Error: Password is not a valid Hex string."
+    except Exception as e:
+        return False, f"Decryption Error: {str(e)}"
+
     context = ssl.create_default_context()
     try:
-        password = smtp_config.Password.get_secret_value()
         sender_email = str(email_message.From)
         username = str(smtp_config.Username)
 

@@ -18,14 +18,15 @@ AWS_SECRET = os.getenv("AWS_SECRET")
 REGION = os.getenv("REGION")
 BUCKET = os.getenv("BUCKET")
 
+SHARED_SECRET_KEY = os.getenv("SHARED_SECRET_KEY")
+
 ALLOWED_EXTENSIONS = {'msg', 'eml'}
 
 LOGS_DIR = BASE_DIR / "logs"
 CERT_DIR = BASE_DIR / "cert"
 BACKUP_DIR = BASE_DIR / "backup"
-OUTPUT_DIR = BASE_DIR / "ouput"
 
-for directory in [LOGS_DIR, CERT_DIR, BACKUP_DIR, OUTPUT_DIR]:
+for directory in [LOGS_DIR, CERT_DIR, BACKUP_DIR]:
     os.makedirs(directory, exist_ok=True)
 
 try:
@@ -44,3 +45,6 @@ except ImportError:
 
 if not AWS_KEY or not AWS_SECRET or not BUCKET:
     logger.warning("CRITICAL: AWS Credentials or Bucket not set in .env file!")
+
+if not SHARED_SECRET_KEY:
+    logger.warning("WARNING: SHARED_SECRET_KEY not set. Email sending will fail.")
