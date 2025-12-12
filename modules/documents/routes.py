@@ -40,7 +40,6 @@ async def generate_report(
     try:
         loop = asyncio.get_running_loop()
 
-        print("Starting DOCX generation...")
         start_docx_gen = time.perf_counter()
 
         page_break = RichText('\f')
@@ -50,8 +49,10 @@ async def generate_report(
             "page_break": page_break
         }
 
+        images_data = [img.model_dump() for img in request.images] if request.images else []
+
         final_docx_bytes = await loop.run_in_executor(
-            process_pool_executor, services.generate_docx, base_template_bytes, context_data
+            process_pool_executor, services.generate_docx, base_template_bytes, context_data, images_data
         )
 
         docx_creation_time = time.perf_counter() - start_docx_gen
@@ -87,12 +88,12 @@ async def generate_report(
             )
 
     except ValueError as ve:
-        print(f"Template Validation Error: {ve}")
+        logger.error(f"Template Validation Error: {ve}")
         raise HTTPException(status_code=400, detail=str(ve))
 
     except Exception as e:
-        print(f"Error during report generation: {e}")
-        raise HTTPException(status_code=500, detail=f"An unexpected server error occurred: {str(e)}")
+        logger.error(f"Report Generation Error: {e}")
+        raise HTTPException(status_code=500, detail=f"Server error: {str(e)}")
 
 @router.post(
     "/merge_pdf",

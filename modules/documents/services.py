@@ -3,6 +3,7 @@ import os
 import uuid
 import base64
 import signal
+import zipfile
 import subprocess
 import tempfile
 from PIL import Image
@@ -12,16 +13,57 @@ from docxtpl import DocxTemplate
 from core.config import logger
 
 
-def generate_docx(template_bytes: bytes, context: dict) -> bytes:
+def generate_docx(template_bytes: bytes, context: dict, images: list = None) -> bytes:
+    temp_image_paths = []
     try:
         tpl = DocxTemplate(io.BytesIO(template_bytes))
+        if images:
+            for image_item in images:
+                source = image_item.get("source")
+                placeholder = image_item.get("placeholder")
+                
+                if not source or not placeholder:
+                    continue
+                try:
+                    image_stream = None
+                    if source.startswith("data:image/"):
+                        _, b64_data = source.split(",", 1)
+                        image_bytes = base64.b64decode(b64_data)
+                        image_stream = io.BytesIO(image_bytes)
+                    else:
+                        try:
+                            image_bytes = base64.b64decode(source)
+                            image_stream = io.BytesIO(image_bytes)
+                        except:
+                            logger.warning(f"Invalid image source format for {placeholder}")
+                            continue
+                
+                    if image_stream:
+                        fd, temp_path = tempfile.mkstemp(suffix=".png")
+                        with os.fdopen(fd, "wb") as f:
+                            f.write(image_stream.getvalue())
+                        
+                        temp_image_paths.append(temp_path)
+                        
+                        try:
+                            tpl.replace_pic(placeholder, temp_path)
+                            logger.info(f"Replaced image placeholder: {placeholder}")
+                        except Exception as e:
+                            logger.warning(f"Could not replace pic '{placeholder}': {e}")
+
+                except Exception as e:
+                    logger.error(f"Failed to process image for '{placeholder}': {e}")
+        
         tpl.render(context, autoescape=True)
         final_docx_buffer = io.BytesIO()
         tpl.save(final_docx_buffer)
         return final_docx_buffer.getvalue()
+        
+    except zipfile.BadZipFile:
+        raise ValueError("Invalid Template: The provided content is not a valid .docx file. Please check your Base64 string.")
+        
     except Exception as e:
-        raise RuntimeError(
-            f"Template Error: Unable to render document. Please check your template tags. Details: {str(e)}")
+        raise ValueError(f"Template Rendering Failed: {str(e)}")
 
 
 def convert_docx_to_pdf_unoconv(docx_data: bytes) -> bytes:
@@ -52,7 +94,6 @@ def convert_docx_to_pdf_unoconv(docx_data: bytes) -> bytes:
         try:
             stdout, stderr = proc.communicate(timeout=300)
         except subprocess.TimeoutExpired:
-            print(f"  -> unoconv timed out for {temp_docx_path}. Killing process group {proc.pid}...")
             os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
             proc.wait()
             raise RuntimeError("unoconv conversion timed out after 5 minutes.")
