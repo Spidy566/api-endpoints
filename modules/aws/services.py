@@ -7,7 +7,6 @@ from botocore.exceptions import ClientError
 from core.config import BUCKET, logger
 from core.dependencies import s3_client, textract_client
 
-# --- 1. Cargo Manifest Extractor Class ---
 class CargoManifestExtractor:
     """
     Extracts key-value pairs, tables, and text from documents using AWS Textract.
@@ -47,9 +46,9 @@ class CargoManifestExtractor:
 
         def get_text(b: Dict[str, Any]) -> str:
             text = ''
-            for rel in b.get('Relationships', []):
-                if rel['Type'] == 'CHILD':
-                    for cid in rel['Ids']:
+            for relationship in b.get('Relationships', []):
+                if relationship['Type'] == 'CHILD':
+                    for cid in relationship['Ids']:
                         c = block_map.get(cid)
                         if c and c['BlockType'] == 'WORD':
                             text += c.get('Text', '') + ' '
@@ -71,9 +70,9 @@ class CargoManifestExtractor:
             if key_block.get('Confidence', 0.0) < min_conf:
                 continue
             val_block = None
-            for rel in key_block.get('Relationships', []):
-                if rel['Type'] == 'VALUE':
-                    val_block = value_map.get(rel['Ids'][0])
+            for key_rel in key_block.get('Relationships', []):
+                if key_rel['Type'] == 'VALUE':
+                    val_block = value_map.get(key_rel['Ids'][0])
                     break
             if val_block and val_block.get('Confidence', 0.0) < min_conf:
                 continue
@@ -88,31 +87,30 @@ class CargoManifestExtractor:
             kv_dict[raw_key] = raw_val
 
         tables = []
-        for b in blocks:
-            if b['BlockType'] == 'TABLE':
-                cells = [block_map[cid] for rel in b.get('Relationships', []) if rel['Type'] == 'CHILD' for cid in rel['Ids']]
+        for bik in blocks:
+            if bik['BlockType'] == 'TABLE':
+                cells = [block_map[cid] for table_rel in bik.get('Relationships', []) if table_rel['Type'] == 'CHILD' for cid in table_rel['Ids']]
                 rows = {}
                 for cell in cells:
                     if cell['BlockType'] != 'CELL': continue
                     r, cidx = cell.get('RowIndex', 0), cell.get('ColumnIndex', 0)
                     rows.setdefault(r, {})[cidx] = get_text(cell)
-                table_data = [[rows[r][c] for c in sorted(rows[r].keys())] for r in sorted(rows.keys())]
-                tables.append(table_data)
+                matrix = [[rows[r][c] for c in sorted(rows[r].keys())] for r in sorted(rows.keys())]
+                tables.append(matrix)
 
         parsed_tables = []
-        for table_data in tables:
-            if not table_data: continue
-            if len(table_data[0]) == 2:
-                parsed_tables.append({row[0]: row[1] for row in table_data})
+        for t_matrix in tables:
+            if not t_matrix: continue
+            if len(t_matrix[0]) == 2:
+                parsed_tables.append({row[0]: row[1] for row in t_matrix})
             else:
-                headers = table_data[0]
+                headers = t_matrix[0]
                 parsed_tables.append([
-                    {headers[i]: row[i] for i in range(len(headers))} for row in table_data[1:]
+                    {headers[i]: row[i] for i in range(len(headers))} for row in t_matrix[1:]
                 ])
 
         return {'key_value_pairs': kv_dict, 'tables': parsed_tables}
 
-# --- 2. Expense Analysis Logic ---
 def parse_expense_response(job_id: str) -> Dict:
     try:
         pages = []
@@ -164,7 +162,6 @@ def parse_expense_response(job_id: str) -> Dict:
                         extracted_data["line_items"].append(row)
     return extracted_data
 
-# --- 3. Document/Invoice Analysis Logic ---
 def parse_vendor_invoice_response(job_id: str) -> Dict:
     try:
         pages = []
@@ -190,22 +187,22 @@ def parse_vendor_invoice_response(job_id: str) -> Dict:
     table_blocks = []
 
     for page in pages:
-        for block in page["Blocks"]:
-            block_map[block["Id"]] = block
-            if block["BlockType"] == "KEY_VALUE_SET":
-                if "KEY" in block["EntityTypes"]:
-                    key_map[block["Id"]] = block
+        for page_block in page["Blocks"]:
+            block_map[page_block["Id"]] = page_block
+            if page_block["BlockType"] == "KEY_VALUE_SET":
+                if "KEY" in page_block["EntityTypes"]:
+                    key_map[page_block["Id"]] = page_block
                 else:
-                    value_map[block["Id"]] = block
-            elif block["BlockType"] == "TABLE":
-                table_blocks.append(block)
+                    value_map[page_block["Id"]] = page_block
+            elif page_block["BlockType"] == "TABLE":
+                table_blocks.append(page_block)
 
-    def get_text(block):
+    def get_text(target_block):
         text = ""
-        if "Relationships" in block:
-            for rel in block["Relationships"]:
-                if rel["Type"] == "CHILD":
-                    for cid in rel["Ids"]:
+        if "Relationships" in target_block:
+            for text_rel in target_block["Relationships"]:
+                if text_rel["Type"] == "CHILD":
+                    for cid in text_rel["Ids"]:
                         word = block_map.get(cid, {})
                         if word.get("BlockType") == "WORD":
                             text += word.get("Text", "") + " "
@@ -213,15 +210,14 @@ def parse_vendor_invoice_response(job_id: str) -> Dict:
                             text += "X "
         return text.strip()
 
-    # Extract header fields
     header_fields = {}
     for key_id, key_block in key_map.items():
         key_text = get_text(key_block)
         val_text = ""
         if "Relationships" in key_block:
-            for rel in key_block["Relationships"]:
-                if rel["Type"] == "VALUE":
-                    for val_id in rel["Ids"]:
+            for kv_rel in key_block["Relationships"]:
+                if kv_rel["Type"] == "VALUE":
+                    for val_id in kv_rel["Ids"]:
                         val_block = value_map.get(val_id)
                         val_text = get_text(val_block)
         if key_text:
@@ -229,15 +225,15 @@ def parse_vendor_invoice_response(job_id: str) -> Dict:
 
     def extract_table(table_block):
         rows = {}
-        for block in pages[0]["Blocks"]:
-            if block["BlockType"] == "CELL" and block.get("Page") == table_block.get("Page"):
-                row = block["RowIndex"]
-                col = block["ColumnIndex"]
-                text = get_text(block)
+        for cell_block in pages[0]["Blocks"]:
+            if cell_block["BlockType"] == "CELL" and cell_block.get("Page") == table_block.get("Page"):
+                row = cell_block["RowIndex"]
+                col = cell_block["ColumnIndex"]
+                text = get_text(cell_block)
                 rows.setdefault(row, {})[col] = text
 
         headers = rows.get(1, {})
-        table_data = []
+        rows_list = []
         for row_idx in sorted(rows.keys()):
             if row_idx == 1:
                 continue
@@ -245,18 +241,18 @@ def parse_vendor_invoice_response(job_id: str) -> Dict:
             for col_idx, col_val in rows[row_idx].items():
                 col_name = headers.get(col_idx, f"Column{col_idx}")
                 row_data[col_name] = col_val
-            table_data.append(row_data)
-        return table_data
+            rows_list.append(row_data)
+        return rows_list
 
     charges_table = []
     container_table = []
     for table in table_blocks:
-        table_data = extract_table(table)
-        table_str = " ".join([",".join(row.values()) for row in table_data]).lower()
+        extracted_rows = extract_table(table)
+        table_str = " ".join([",".join(row.values()) for row in extracted_rows]).lower()
         if "container" in table_str:
-            container_table.extend(table_data)
+            container_table.extend(extracted_rows)
         else:
-            charges_table.extend(table_data)
+            charges_table.extend(extracted_rows)
 
     seen = set()
     deduped_charges = []

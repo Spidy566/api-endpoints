@@ -51,3 +51,12 @@ class VCScanResponse(BaseModel):
     parsed_data: Union[Dict[str, Any], List[Any]] = Field(default=None, title="", description="The structured JSON data extracted by the AI.")
     model_used: str = Field(..., title="", description="The AI model used for the extraction.")
     error: Optional[str] = Field(default=None, title="", description="Error message if the AI or OCR failed.")
+
+class BLRequest(BaseModel):
+    pdf_base64: str = Field(..., title="", description="Base64 encoded PDF string.")
+    openai_api_key: str = Field(..., title="", description="Your OpenAI API Key.")
+
+class BLResponse(BaseModel):
+    success: bool = Field(..., title="", description="Indicates whether the Bill of Lading extraction was successful.")
+    extracted_bl: Dict[str, Any]  = Field(..., title="", description="The structured JSON object containing extracted fields (Shipper, Consignee, Containers, etc.).")
+    error: Optional[str] = Field(default=None, title="", description="Detailed error message if the extraction failed, otherwise null.")

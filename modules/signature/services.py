@@ -1,3 +1,4 @@
+import logging
 import asyncio
 from io import BytesIO
 from pathlib import Path
@@ -11,12 +12,12 @@ from pyhanko.pdf_utils.incremental_writer import IncrementalPdfFileWriter
 from pyhanko.pdf_utils.reader import PdfFileReader
 from pyhanko.sign import signers, fields, validation
 from pyhanko.sign.fields import SigSeedSubFilter
+from pyhanko_certvalidator import errors, ValidationContext
 
 from core.config import logger, CERT_DIR
 from core.dependencies import thread_pool_executor
 
 
-# --- Certificate Management ---
 
 def get_cert_path(name: str) -> Optional[Path]:
     """Finds a .pfx file in the certs directory matching the name."""
@@ -74,14 +75,9 @@ def sign_pdf_sync(pdf_data: bytes, cert_info: dict,
                   x: float = 450, y: float = 50,
                   box_width: float = 200, box_height: float = 70) -> bytes:
     """Synchronous function to sign PDF (runs in thread pool)."""
-    signed_pdf = None
     try:
         reader = PdfFileReader(BytesIO(pdf_data))
-        try:
-            page_tree = reader.page_tree
-            total_pages = sum(1 for _ in page_tree)
-        except:
-            total_pages = reader.root['/Pages']['/Count']
+        total_pages = int(reader.root['/Pages']['/Count'])
 
         if page == -1:
             page = total_pages - 1
@@ -111,53 +107,25 @@ def sign_pdf_sync(pdf_data: bytes, cert_info: dict,
             sig_field_spec = fields.SigFieldSpec(
                 sig_field_name='Signature1',
                 on_page=page,
-                box=(x, y, x + box_width, y + box_height)
+                box=(int(x), int(y), int(x + box_width), int(y + box_height))
             )
             fields.append_signature_field(w, sig_field_spec)
 
-        prepared_buf = BytesIO()
-        w.write(prepared_buf)
-        prepared_buf.seek(0)
+        out_buf = BytesIO()
 
-        try:
-            from pyhanko.sign.signers.pdf_signer import sign_pdf
-            result = sign_pdf(
-                pdf_in=prepared_buf if visible else BytesIO(pdf_data),
-                signers=[signer],
-                signature_meta=signature_meta,
-                existing_fields_only=visible,
-            )
-            if hasattr(result, 'read'):
-                signed_pdf = result.read()
-            else:
-                signed_pdf = result
-        except (ImportError, AttributeError):
-            w2 = IncrementalPdfFileWriter(prepared_buf if visible else BytesIO(pdf_data))
-            out = signers.sign_pdf(
-                w2,
-                signature_meta,
-                signer=signer,
-                existing_fields_only=visible
-            )
-            out_buf = BytesIO()
-            if hasattr(out, 'write_to'):
-                out.write_to(out_buf)
-            elif hasattr(out, 'getvalue'):
-                out_buf.write(out.getvalue())
-            else:
-                out_buf.write(out)
-            out_buf.seek(0)
-            signed_pdf = out_buf.getvalue()
-
-        if not isinstance(signed_pdf, bytes):
-            raise ValueError("Failed to get bytes from signing operation")
-
+        signers.sign_pdf(
+            w,
+            signature_meta,
+            signer=signer,
+            existing_fields_only=visible,
+            output=out_buf
+        )
+        signed_pdf = out_buf.getvalue()
         return signed_pdf
 
     except Exception as e:
         logger.error(f"Error in synchronous signing: {str(e)}")
         raise
-
 
 async def sign_pdf_async(pdf_data: bytes, cert_info: dict, request_data: Any):
     """Async wrapper around the sync signing function."""
@@ -172,8 +140,12 @@ async def sign_pdf_async(pdf_data: bytes, cert_info: dict, request_data: Any):
         request_data.box_height
     )
 
+
 def validate_pdf_content(pdf_bytes: bytes) -> Dict:
     """Validate digital signatures in a PDF."""
+    logging.getLogger("pyhanko_certvalidator").setLevel(logging.ERROR)
+    logging.getLogger("pyhanko.sign.validation").setLevel(logging.ERROR)
+
     try:
         pdf_reader = PdfFileReader(BytesIO(pdf_bytes))
 
@@ -186,68 +158,105 @@ def validate_pdf_content(pdf_bytes: bytes) -> Dict:
             }
 
         signatures = []
+
         for sig_field in pdf_reader.embedded_signatures:
+            val_result = None
+
+            signer_name = "Unknown"
+            is_valid = False
+            is_intact = False
+            is_trusted = False
+            status_label = "Invalid"
+            visual_indicator = "❓ Error"
+            timestamp_str = None
+            cert = None
+            error_msg = None
+
             try:
-                val_result = validation.validate_pdf_signature(sig_field)
+                vc = ValidationContext(revocation_mode='soft-fail')
+
+                val_result = validation.validate_pdf_signature(
+                    sig_field,
+                    signer_validation_context=vc
+                )
 
                 is_valid = getattr(val_result, 'valid', False)
                 is_intact = getattr(val_result, 'intact', False)
                 is_trusted = getattr(val_result, 'trusted', False)
-
-                status_valid = is_valid and is_intact
-
-                signer_name = "Unknown"
                 cert = getattr(val_result, 'signing_cert', None) or getattr(val_result, 'signer_cert', None)
 
-                if cert:
-                    try:
-                        cn_attributes = cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
-                        if cn_attributes:
-                            signer_name = cn_attributes[0].value
-                        else:
-                            o_attributes = cert.subject.get_attributes_for_oid(NameOID.ORGANIZATION_NAME)
-                            signer_name = o_attributes[0].value if o_attributes else cert.subject.rfc4514_string()
-                    except Exception as e:
-                        logger.warning(f"Name extraction failed: {e}")
-                        signer_name = "Unknown"
+            except (errors.PathBuildingError, errors.InvalidCertificateError):
+                try:
+                    cert = sig_field.signer_cert
+                    if cert:
+                        vc_self_signed = ValidationContext(trust_roots=[cert], revocation_mode='soft-fail')
 
+                        val_result = validation.validate_pdf_signature(
+                            sig_field,
+                            signer_validation_context=vc_self_signed
+                        )
+
+                        is_intact = getattr(val_result, 'intact', False)
+                        is_valid = getattr(val_result, 'valid', False)
+
+                        if is_intact:
+                            is_trusted = False
+                            status_label = "Valid (Untrusted)"
+                            visual_indicator = "⚠️ Untrusted"
+                        else:
+                            status_label = "Invalid (Tampered)"
+                            visual_indicator = "❌ Invalid"
+                except Exception as retry_err:
+                    error_msg = str(retry_err)
+                    status_label = "Untrusted"
+                    visual_indicator = "❌ Untrusted"
+
+            if cert:
+                try:
+                    subject_data = cert.subject.native
+                    if isinstance(subject_data, dict):
+                        signer_name = subject_data.get('common_name') or subject_data.get(
+                            'organization_name') or "Unknown"
+                    else:
+                        signer_name = str(subject_data)
+                except (AttributeError, KeyError, TypeError):
+                    signer_name = "Unknown"
+
+            if 'val_result' in locals():
                 ts_obj = getattr(val_result, 'timestamp', None)
                 if not ts_obj:
                     ts_obj = getattr(val_result, 'signer_reported_dt', None)
-
                 timestamp_str = str(ts_obj) if ts_obj else None
 
-                sig_info = {
-                    "field_name": sig_field.field_name,
-                    "signer": signer_name,
-                    "valid": is_valid,
-                    "trusted": is_trusted,
-                    "timestamp": timestamp_str,
-                    "intact": is_intact,
-                    "status": "Valid" if status_valid else "Invalid",
-                    "visual_indicator": "✅ Verified" if status_valid else "❓ Needs Verification"
-                }
-                signatures.append(sig_info)
-            except Exception as e:
-                logger.error(f"Validation failed for field {sig_field.field_name}: {e}")
-                signatures.append({
-                    "field_name": sig_field.field_name,
-                    "signer": "Unknown",
-                    "valid": False,
-                    "trusted": False,
-                    "intact": False,
-                    "status": "Error",
-                    "error": str(e),
-                    "visual_indicator": "❓ Error"
-                })
+                if is_valid and is_intact and is_trusted:
+                    status_label = "Valid"
+                    visual_indicator = "✅ Verified"
+                elif is_valid and is_intact and not is_trusted and status_label == "Invalid":
+                    status_label = "Valid (Untrusted)"
+                    visual_indicator = "⚠️ Untrusted"
+
+            sig_info = {
+                "field_name": sig_field.field_name,
+                "signer": signer_name,
+                "valid": is_valid,
+                "trusted": is_trusted,
+                "timestamp": timestamp_str,
+                "intact": is_intact,
+                "status": status_label,
+                "visual_indicator": visual_indicator,
+                "error": error_msg
+            }
+            signatures.append(sig_info)
 
         return {
             "has_signatures": True,
             "signature_count": len(signatures),
             "signatures": signatures,
-            "message": "Signatures found and validated"
+            "message": "Signatures found and validated",
+            "error": None
         }
     except Exception as e:
+        logger.error(f"Global validation error: {e}")
         return {
             "has_signatures": False,
             "signature_count": 0,

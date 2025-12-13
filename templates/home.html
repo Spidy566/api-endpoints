@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ title }} - Dashboard</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 0; padding: 20px; background: #f4f4f9; }
+        .container { max-width: 900px; margin: auto; background: white; padding: 40px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        .header { display: flex; align-items: center; border-bottom: 2px solid #eee; padding-bottom: 20px; margin-bottom: 20px; }
+        .logo { height: 50px; margin-right: 20px; }
+        h1 { margin: 0; color: #333; }
+        .status-box { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; margin-bottom: 30px; }
+        .card { background: #e3f2fd; padding: 20px; border-radius: 8px; text-align: center; }
+        .card h3 { margin: 0 0 10px 0; color: #1565c0; }
+        .card p { font-size: 24px; font-weight: bold; margin: 0; color: #333; }
+        .features ul { list-style-type: none; padding: 0; }
+        .features li { background: #f9f9f9; margin: 5px 0; padding: 10px; border-left: 4px solid #4caf50; }
+        .btn { display: inline-block; padding: 10px 20px; background: #1976d2; color: white; text-decoration: none; border-radius: 5px; margin-top: 20px; }
+        .btn:hover { background: #1565c0; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <img src="/static/Fresa-Tech-logo.png" alt="Logo" class="logo">
+            <div>
+                <h1>{{ title }}</h1>
+                <small>Version {{ version }}</small>
+            </div>
+        </div>
+
+        <div class="status-box">
+            <div class="card">
+                <h3>Certificates</h3>
+                <p>{{ cert_count }}</p>
+            </div>
+            <div class="card">
+                <h3>Total Requests</h3>
+                <p>{{ total_requests }}</p>
+            </div>
+            <div class="card">
+                <h3>System Status</h3>
+                <p style="color: green">Operational</p>
+            </div>
+        </div>
+
+        <div class="features">
+            <h3>Active Modules</h3>
+            <ul>
+                {% for feature in features %}
+                <li>{{ feature }}</li>
+                {% endfor %}
+            </ul>
+        </div>
+
+        <a href="/docs" class="btn">View Swagger API Docs</a>
+        <a href="/redoc" class="btn" style="background:#e65100">View ReDoc</a>
+    </div>
+</body>
+</html>

@@ -1,13 +1,14 @@
 import requests
 import json
 import base64
+from typing import Dict, Any, Union, List
 from core.config import logger
-from modules.ai import utils
+from modules.ai import utils, prompts
 
 
 def process_with_openai(api_key: str, model: str, prompt_header: str, prompt_details: str,
                         base64_content: str, api_token: str, temperature: float,
-                        top_p: float, timeout: int) -> dict:
+                        top_p: float, timeout: int) -> Dict[str, Any]:
     """Process document with OpenAI Vision API"""
     try:
         full_prompt = ""
@@ -25,8 +26,8 @@ def process_with_openai(api_key: str, model: str, prompt_header: str, prompt_det
             decoded_size = len(base64.b64decode(base64_content, validate=True))
             if decoded_size > 20 * 1024 * 1024:
                 return {"success": False, "error": "File too large (>20MB)"}
-        except Exception as e:
-            return {"success": False, "error": f"Invalid base64: {str(e)}"}
+        except Exception as b64_err:
+            return {"success": False, "error": f"Invalid base64: {str(b64_err)}"}
 
         try:
             file_format = utils.detect_and_validate_format(base64_content)
@@ -37,12 +38,12 @@ def process_with_openai(api_key: str, model: str, prompt_header: str, prompt_det
             else:
                 converted_images = [base64_content]
 
-        except ValueError as e:
-            return {"success": False, "error": str(e)}
-        except Exception as e:
-            return {"success": False, "error": f"File processing failed: {str(e)}"}
+        except ValueError as val_err:
+            return {"success": False, "error": str(val_err)}
+        except Exception as fmt_err:
+            return {"success": False, "error": f"File processing failed: {str(fmt_err)}"}
 
-        content = [{"type": "text", "text": full_prompt}]
+        content: List[Dict[str, Any]] = [{"type": "text", "text": full_prompt}]
 
         for i, image_base64 in enumerate(converted_images):
             content.append({
@@ -55,7 +56,7 @@ def process_with_openai(api_key: str, model: str, prompt_header: str, prompt_det
             logger.info(f"Added image {i + 1}/{len(converted_images)} to request")
 
         headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
-        payload = {
+        payload: Dict[str, Any] = {
             "model": model,
             "messages": [{
                 "role": "user",
@@ -67,6 +68,7 @@ def process_with_openai(api_key: str, model: str, prompt_header: str, prompt_det
         }
 
         logger.info(f"Sending request to OpenAI with {len(converted_images)} images")
+
         response = requests.post("https://api.openai.com/v1/chat/completions",
                                  headers=headers, json=payload, timeout=timeout)
 
@@ -93,7 +95,6 @@ def process_with_openai(api_key: str, model: str, prompt_header: str, prompt_det
 
             cleaned_response = cleaned_response.strip()
 
-            # Parse JSON response
             try:
                 parsed_json = json.loads(cleaned_response)
 
@@ -102,16 +103,15 @@ def process_with_openai(api_key: str, model: str, prompt_header: str, prompt_det
                     "extracted_data": parsed_json
                 }
 
-            except json.JSONDecodeError as e:
-                logger.error(f"JSON Parse Error: {str(e)}")
+            except json.JSONDecodeError as json_err:
+                logger.error(f"JSON Parse Error: {str(json_err)}")
                 logger.error(f"Raw AI Response: {ai_response[:500]}")
                 return {
                     "success": False,
-                    "error": f"JSON parsing failed: {str(e)}",
+                    "error": f"JSON parsing failed: {str(json_err)}",
                     "raw_response": ai_response[:500]
                 }
 
-        # Handle API errors
         error_map = {
             429: "Rate limit exceeded",
             400: "Bad request - check parameters",
@@ -126,68 +126,24 @@ def process_with_openai(api_key: str, model: str, prompt_header: str, prompt_det
         return {"success": False, "error": "Request timeout"}
     except requests.exceptions.ConnectionError:
         return {"success": False, "error": "Connection error"}
-    except Exception as e:
-        return {"success": False, "error": f"Processing error: {str(e)}"}
+    except Exception as gen_err:
+        return {"success": False, "error": f"Processing error: {str(gen_err)}"}
 
-def extract_card_json_with_openai(api_key: str, model: str, raw_text: str, cleaned_text: str, timeout: int = 120) -> dict:
+def extract_card_json_with_openai(api_key: str, model: str, raw_text: str, cleaned_text: str, timeout: int = 120) -> Union[Dict[str, Any], Dict[str, str]]:
     """Extract structured JSON from OCR text using OpenAI"""
     headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
-    system_msg = {
-        "role": "system",
-        "content": (
-            "You are an AI data extractor. "
-            "Your only task is to output valid JSON. "
-            "Do not include explanations, text, or markdown. "
-            "Output must be a single JSON object following exactly the required keys."
-        ),
-    }
 
-    user_prompt = f"""
-Extract structured contact information from the OCR text below.
+    user_prompt = prompts.VC_SCAN_USER_TEMPLATE.format(
+        raw_text=raw_text,
+        cleaned_text=cleaned_text
+    )
 
-Rules:
-1️⃣ Always detect multiple companies, phone numbers, and addresses if they exist.
-2️⃣ Each key must contain an array of strings, even if one value.
-3️⃣ Required keys:
-   - name
-   - designation
-   - company_name
-   - emails
-   - phone_numbers
-   - address
-   - city
-   - country
-   - website
-   - slogan
-4️⃣ Merge multi-line addresses but keep different locations separate.
-5️⃣ Fix OCR mistakes (e.g. '@ ' → '@', 'dot' → '.').
-
-Example:
-{{
-  "name": ["John Smith"],
-  "designation": ["Sales Director"],
-  "company_name": ["ABC Logistics", "XYZ Shipping"],
-  "emails": ["john@abclogistics.com"],
-  "phone_numbers": ["+1 212-555-7890", "+971 50 123 4567"],
-  "address": ["123 Main St, New York, USA", "Dubai Marina, UAE"],
-  "city": ["New York", "Dubai"],
-  "country": ["USA", "UAE"],
-  "website": ["www.abclogistics.com"],
-  "slogan": ["We move the world"]
-}}
-
-Now extract from:
-
-Raw OCR:
-\"\"\"{raw_text}\"\"\"
-
-Cleaned OCR:
-\"\"\"{cleaned_text}\"\"\"
-"""
-
-    payload = {
+    payload: Dict[str, Any] = {
         "model": model,
-        "messages": [system_msg, {"role": "user", "content": user_prompt}],
+        "messages": [
+            prompts.VC_SCAN_SYSTEM_MESSAGE,
+            {"role": "user", "content": user_prompt}
+        ],
     }
 
     if model.startswith("gpt-5"):
@@ -197,14 +153,17 @@ Cleaned OCR:
         payload["temperature"] = 0.1
         payload["top_p"] = 0.9
 
-    def call_openai() -> dict:
-        resp = requests.post("https://api.openai.com/v1/chat/completions",
-                             headers=headers, json=payload, timeout=timeout)
-        if resp.status_code != 200:
-            return {"error": f"OpenAI API error {resp.status_code}: {resp.text[:300]}"}
-        data = resp.json()
-        content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-        return {"text": content.strip()}
+    def call_openai() -> Dict[str, str]:
+        try:
+            resp = requests.post("https://api.openai.com/v1/chat/completions",
+                                 headers=headers, json=payload, timeout=timeout)
+            if resp.status_code != 200:
+                return {"error": f"OpenAI API error {resp.status_code}: {resp.text[:300]}"}
+            data = resp.json()
+            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
+            return {"text": content.strip()}
+        except Exception as req_err:
+            return {"error": str(req_err)}
 
     result = call_openai()
     text = result.get("text", "").strip()
@@ -225,5 +184,81 @@ Cleaned OCR:
 
     try:
         return json.loads(text)
+    except Exception as parse_err:
+        return {"error": f"Failed to parse JSON: {parse_err}", "raw": text[:1000]}
+
+
+def extract_bl_data(api_key: str, pdf_base64: str) -> Dict[str, Any]:
+    """Bill of Lading Extraction"""
+    try:
+        try:
+            clean_b64 = utils.extract_base64_content(pdf_base64)
+            if not clean_b64:
+                return {"success": False, "error": "Invalid base64 provided"}
+
+            base64_images = utils.convert_pdf_to_jpeg(clean_b64)
+        except Exception as conv_err:
+            return {"success": False, "error": f"PDF Conversion failed: {str(conv_err)}"}
+
+        if not base64_images:
+            return {"success": False, "error": "Could not extract images from PDF"}
+
+        vision_content: List[Dict[str, Any]] = [
+            {"type": "text", "text": prompts.BL_EXTRACTION_USER}
+        ]
+
+        for img_b64 in base64_images:
+            vision_content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{img_b64}",
+                    "detail": "high"
+                }
+            })
+
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": prompts.BL_EXTRACTION_SYSTEM},
+                {"role": "user", "content": vision_content}
+            ],
+            "max_tokens": 4096,
+            "temperature": 0
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=180
+        )
+
+        if response.status_code != 200:
+            return {"success": False, "error": f"OpenAI Error {response.status_code}: {response.text}"}
+
+        result = response.json()
+
+        if 'choices' not in result or not result['choices']:
+            return {"success": False, "error": "No choices returned from OpenAI"}
+
+        ai_response = result['choices'][0]['message']['content'].strip()
+
+        if "```json" in ai_response:
+            ai_response = ai_response.split("```json")[1].split("```")[0].strip()
+        elif "```" in ai_response:
+            ai_response = ai_response.split("```")[1].split("```")[0].strip()
+
+        try:
+            bl_data = json.loads(ai_response)
+            return {"success": True, "extracted_bl": bl_data}
+        except json.JSONDecodeError as json_err:
+            return {"success": False, "error": f"JSON Parse Error: {json_err}", "raw": ai_response}
+
     except Exception as e:
-        return {"error": f"Failed to parse JSON: {e}", "raw": text[:1000]}
+        logger.error(f"BL Extraction Error: {e}")
+        return {"success": False, "error": str(e)}

@@ -20,6 +20,9 @@ BUCKET = os.getenv("BUCKET")
 
 SHARED_SECRET_KEY = os.getenv("SHARED_SECRET_KEY")
 
+API_USERNAME = os.getenv("API_USERNAME")
+API_PASSWORD = os.getenv("API_PASSWORD")
+
 ALLOWED_EXTENSIONS = {'msg', 'eml'}
 
 LOGS_DIR = BASE_DIR / "logs"

@@ -1,9 +1,10 @@
-import base64
 import io
 import os
+import base64
+import binascii
 import tempfile
 import fitz
-from PIL import Image
+from PIL import Image, UnidentifiedImageError
 from typing import List, Optional
 
 from core.config import logger, HAS_EASYOCR, HAS_TESSERACT
@@ -36,7 +37,7 @@ def extract_base64_content(file_content: str) -> Optional[str]:
         base64.b64decode(content, validate=True)
         return content
 
-    except Exception:
+    except (binascii.Error, ValueError):
         return None
 
 
@@ -86,10 +87,12 @@ def convert_pdf_to_jpeg(pdf_base64: str) -> List[str]:
                 image = image.convert("RGB")
 
             # Resize if too large
-            if max(image.size) > 2000:
-                ratio = 2000 / max(image.size)
-                new_size = tuple(int(dim * ratio) for dim in image.size)
-                image = image.resize(new_size, Image.Resampling.LANCZOS)
+            width, height = image.size
+            if max(width, height) > 2000:
+                ratio = 2000 / max(width, height)
+                new_width = int(width * ratio)
+                new_height = int(height * ratio)
+                image = image.resize((new_width, new_height), Image.Resampling.LANCZOS)
 
             output_buffer = io.BytesIO()
             image.save(output_buffer, format="JPEG", quality=95, optimize=True)
@@ -100,8 +103,8 @@ def convert_pdf_to_jpeg(pdf_base64: str) -> List[str]:
 
         pdf_document.close()
         return images
-    except Exception as e:
-        raise Exception(f"PDF conversion failed: {str(e)}")
+    except Exception as pdf_err:
+        raise Exception(f"PDF conversion failed: {str(pdf_err)}")
 
 def rasterize_first_page_to_jpeg(pdf_bytes: bytes) -> bytes:
     """Convert first page of a PDF to a high-quality JPEG (RGB)."""
@@ -139,7 +142,7 @@ def to_temp_image(file_bytes: bytes, content_type: str, original_name: str) -> s
             im.save(b, format="JPEG", quality=95, optimize=True)
             img_bytes = b.getvalue()
             b.close()
-        except Exception:
+        except (UnidentifiedImageError, OSError, ValueError):
             suffix = os.path.splitext(original_name)[1] or ".bin"
 
     fd, temp_path = tempfile.mkstemp(prefix="vc_", suffix=suffix)
@@ -153,7 +156,8 @@ def _ocr_with_easyocr(img_path: str) -> str:
     try:
         result = _EASY_OCR_READER.readtext(img_path)
         return " ".join([line[1] for line in result]) if result else ""
-    except Exception:
+    except Exception as easy_err:
+        logger.warning(f"EasyOCR failed: {easy_err}")
         return ""
 
 def _ocr_with_tesseract(img_path: str) -> str:
@@ -162,7 +166,8 @@ def _ocr_with_tesseract(img_path: str) -> str:
     try:
         from PIL import Image as _Image
         return pytesseract.image_to_string(_Image.open(img_path))
-    except Exception:
+    except Exception as tess_err:
+        logger.warning(f"Tesseract failed: {tess_err}")
         return ""
 
 def ocr_extract_card(img_path: str) -> str:

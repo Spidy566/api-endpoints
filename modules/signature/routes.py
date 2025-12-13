@@ -93,7 +93,6 @@ async def sign_invoice(request: schemas.InvoiceSignRequest):
     response_model=schemas.ValidationResponse
 )
 async def validate_signature(request: schemas.ValidationRequest):
-    """Validate an existing signed PDF."""
     try:
         try:
             pdf_data = base64.b64decode(request.signed_pdf_base64, validate=True)
@@ -131,7 +130,6 @@ async def upload_certificate(
         file: UploadFile = File(..., title="", description="The .pfx certificate file."),
         overwrite: bool = Form(default=False, title="", description="Whether to overwrite an existing certificate.")
 ):
-    """Upload a .pfx certificate file."""
     if not file.filename.lower().endswith('.pfx'):
         raise HTTPException(status_code=400, detail="Only .pfx files are allowed.")
 

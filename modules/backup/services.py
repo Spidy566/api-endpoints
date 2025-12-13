@@ -1,4 +1,3 @@
-import shutil
 from pathlib import Path
 from fastapi import UploadFile, HTTPException
 from fastapi.responses import FileResponse
@@ -25,7 +24,11 @@ def save_backup_file(file: UploadFile) -> dict:
             raise HTTPException(status_code=400,detail=f"Cannot save file: A directory named '{filename}' already exists.")
 
         with open(file_path, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            while True:
+                chunk = file.file.read(1024 * 1024)
+                if not chunk:
+                    break
+                buffer.write(chunk)
 
         logger.info(f"Backup file saved: {file_path}")
 

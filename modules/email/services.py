@@ -11,19 +11,25 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email.mime.text import MIMEText
 from email.mime.image import MIMEImage
+from typing import List, Dict, Any, Optional
+
 import extract_msg
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from core.config import logger, ALLOWED_EXTENSIONS, SHARED_SECRET_KEY
 from modules.email.schemas import SmtpConfig, EmailMessage
 
-def allowed_file(filename):
+def allowed_file(filename: str) -> bool:
     """Check if uploaded file has allowed extension"""
+    if not filename:
+        return False
     return '.' in filename and \
-           filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+        filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def get_file_type(filename):
+def get_file_type(filename: str) -> Optional[str]:
     """Determine file type based on extension"""
+    if not filename:
+        return None
     if filename.lower().endswith('.msg'):
         return 'msg'
     elif filename.lower().endswith('.eml'):
@@ -66,7 +72,7 @@ class EmailAttachmentExtractor:
     }
 
     @staticmethod
-    def is_supported_file(filename, content_type=None):
+    def is_supported_file(filename: Optional[str], content_type: Optional[str] = None) -> bool:
         if not filename: return False
 
         file_ext = '.' + filename.lower().split('.')[-1] if '.' in filename else ''
@@ -79,13 +85,13 @@ class EmailAttachmentExtractor:
         return False
 
     @staticmethod
-    def get_file_extension(filename):
+    def get_file_extension(filename: Optional[str]) -> str:
         if not filename or '.' not in filename:
             return '.unknown'
         return '.' + filename.lower().split('.')[-1]
 
     @staticmethod
-    def validate_file_content(data, expected_extension):
+    def validate_file_content(data: bytes, expected_extension: str) -> bool:
         if not data or len(data) < 4: return False
         signatures = EmailAttachmentExtractor.FILE_SIGNATURES.get(expected_extension, [])
         for signature in signatures:
@@ -93,7 +99,7 @@ class EmailAttachmentExtractor:
         return False
 
     @staticmethod
-    def get_default_filename(index, extension, content_type=None):
+    def get_default_filename(index: int, extension: str, content_type: Optional[str] = None) -> str:
         base_name = f"attachment_{index}"
         if extension and extension != '.unknown': return f"{base_name}{extension}"
         elif content_type:
@@ -103,8 +109,8 @@ class EmailAttachmentExtractor:
         return f"{base_name}.bin"
 
     @staticmethod
-    def extract_from_eml(file_content):
-        attachments = []
+    def extract_from_eml(file_content: bytes) -> List[Dict[str, Any]]:
+        attachments: List[Dict[str, Any]] = []
 
         try:
             msg = message_from_bytes(file_content)
@@ -217,11 +223,14 @@ class EmailAttachmentExtractor:
                     logger.debug(f"--- Processing MSG attachment {i} ---")
 
                     try:
-                        filename = (getattr(attachment, 'longFilename', None) or
-                                    getattr(attachment, 'shortFilename', None) or
-                                    getattr(attachment, 'displayName', None))
+                        long_name = getattr(attachment, 'longFilename', None)
+                        short_name = getattr(attachment, 'shortFilename', None)
+                        display_name = getattr(attachment, 'displayName', None)
 
-                        file_ext = EmailAttachmentExtractor.get_file_extension(filename) if filename else '.unknown'
+                        filename_raw = long_name or short_name or display_name
+                        filename = str(filename_raw) if filename_raw else None
+
+                        file_ext = EmailAttachmentExtractor.get_file_extension(filename)
 
                         if not filename:
                             filename = EmailAttachmentExtractor.get_default_filename(i, file_ext)
@@ -235,18 +244,22 @@ class EmailAttachmentExtractor:
                         if EmailAttachmentExtractor.is_supported_file(filename):
                             logger.debug(f"Attachment {i}: Processing as supported file: {filename}")
 
-                            attachment_data = attachment.data
+                            raw_data = getattr(attachment, 'data', None)
 
-                            if attachment_data and len(attachment_data) > 0:
-                                logger.debug(f"Attachment {i}: Data extracted - {len(attachment_data)} bytes")
+                            if not isinstance(raw_data, bytes):
+                                logger.warning(f"Attachment {i}: Data is not bytes. Skipping.")
+                                continue
+
+                            if len(raw_data) > 0:
+                                logger.debug(f"Attachment {i}: Data extracted - {len(raw_data)} bytes")
 
                                 expected_ext = EmailAttachmentExtractor.get_file_extension(filename)
-                                is_valid = EmailAttachmentExtractor.validate_file_content(attachment_data, expected_ext)
+                                is_valid = EmailAttachmentExtractor.validate_file_content(raw_data, expected_ext)
 
                                 if is_valid or expected_ext == '.unknown':
                                     logger.debug(f"Attachment {i}: Valid {expected_ext} file format detected")
 
-                                    base64_content = base64.b64encode(attachment_data).decode('utf-8')
+                                    base64_content = base64.b64encode(raw_data).decode('utf-8')
 
                                     content_type = EmailAttachmentExtractor.MIME_TYPE_MAP.get(expected_ext,
                                                                                               'application/octet-stream')
@@ -255,17 +268,17 @@ class EmailAttachmentExtractor:
                                         'filename': filename,
                                         'content': base64_content,
                                         'content_type': content_type,
-                                        'size_bytes': len(attachment_data),
+                                        'size_bytes': len(raw_data),
                                         'file_extension': expected_ext
                                     }
 
                                     attachments.append(attachment_info)
                                     logger.info(
-                                        f"SUCCESS: Extracted {expected_ext} file {len(attachments)}: {filename} ({len(attachment_data)} bytes, {len(base64_content)} base64 chars)")
+                                        f"SUCCESS: Extracted {expected_ext} file {len(attachments)}: {filename} ({len(raw_data)} bytes, {len(base64_content)} base64 chars)")
 
                                 else:
                                     logger.warning(
-                                        f"Attachment {i}: File {filename} failed content validation for {expected_ext} - first 10 bytes: {attachment_data[:10]}")
+                                        f"Attachment {i}: File {filename} failed content validation for {expected_ext} - first 10 bytes: {raw_data[:10]}")
                             else:
                                 logger.warning(f"Attachment {i}: Empty attachment data for {filename}")
                         else:

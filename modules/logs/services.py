@@ -3,7 +3,7 @@ from pathlib import Path
 from fastapi import HTTPException, Request
 from fastapi.responses import FileResponse
 
-from core.config import LOGS_DIR, logger
+from core.config import LOGS_DIR
 
 request_counts = defaultdict(int)
 request_logs = defaultdict(list)

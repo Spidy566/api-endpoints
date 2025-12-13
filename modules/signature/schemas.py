@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Dict, Any, List, Optional
+from typing import List, Optional
 
 class InvoiceSignRequest(BaseModel):
     invoice_pdf_base64: str = Field(..., title="",description="Base64 encoded string of the PDF file to be signed.")

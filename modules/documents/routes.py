@@ -1,5 +1,6 @@
 import asyncio
 import base64
+import binascii
 import time
 from fastapi import APIRouter, HTTPException, Query, Body, Response
 from docxtpl import RichText
@@ -31,7 +32,7 @@ async def generate_report(
 ):
     try:
         base_template_bytes = base64.b64decode(request.template_file)
-    except (base64.binascii.Error, TypeError) as e:
+    except (binascii.Error, TypeError) as e:
         raise HTTPException(status_code=400, detail=f"Invalid base64 template string: {e}")
 
     if not request.records:

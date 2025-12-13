@@ -1,5 +1,6 @@
 import base64
 import binascii
+from typing import Dict, Any
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from core.config import logger
 from modules.email import schemas, services
@@ -18,7 +19,9 @@ async def extract_attachments(file: UploadFile = File(..., title="", description
     try:
         logger.info("=== NEW EMAIL EXTRACTION REQUEST STARTED ===")
 
-        if file.filename == '':
+        filename: str = file.filename or ""
+
+        if not filename:
             raise HTTPException(status_code=400, detail="No file selected")
 
         if not services.allowed_file(file.filename):
@@ -40,12 +43,12 @@ async def extract_attachments(file: UploadFile = File(..., title="", description
 
         logger.info(f"EXTRACTION RESULT: Found {len(attachments)} supported attachments")
 
-        file_type_counts = {}
+        file_type_counts: Dict[str, int] = {}
         for att in attachments:
             ext = att.get('file_extension', '.unknown')
             file_type_counts[ext] = file_type_counts.get(ext, 0) + 1
 
-        response_data = {
+        response_data: Dict[str, Any]  = {
             'success': True,
             'message': f'Successfully processed {file.filename}',
             'file_type': file_type,
@@ -73,7 +76,9 @@ async def extract_attachments(file: UploadFile = File(..., title="", description
         logger.info(f"  total_attachments: {response_data['total_attachments']}")
         logger.info(f"  file_type_counts: {response_data['file_type_counts']}")
         logger.info(f"  attachments array length: {len(response_data['attachments'])}")
-        logger.info(f"  attachment filenames: {[att['filename'] for att in response_data['attachments']]}")
+
+        filenames = [att['filename'] for att in response_data['attachments']]
+        logger.info(f"  attachment filenames: {filenames}")
 
         base64_contents = [att['content'] for att in response_data['attachments']]
         unique_contents = set(base64_contents)

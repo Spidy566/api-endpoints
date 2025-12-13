@@ -1,8 +1,11 @@
 import os
+import asyncio
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import Optional
 
 from core.config import logger
+from core.dependencies import thread_pool_executor
+
 from modules.ai import schemas, services, utils
 
 router = APIRouter()
@@ -138,3 +141,40 @@ async def scan_visiting_card(
     finally:
         if temp_path and os.path.exists(temp_path):
             os.remove(temp_path)
+
+
+@router.post(
+    "/extract-bl",
+    summary="Extract Bill of Lading",
+    description="Extracts specific fields from a BL PDF using OpenAI Vision (gpt-4o-mini).",
+    response_model=schemas.BLResponse
+)
+async def extract_bl(request: schemas.BLRequest):
+    try:
+        if not request.pdf_base64:
+            raise HTTPException(status_code=400, detail="PDF content is required")
+
+        loop = asyncio.get_running_loop()
+
+        result = await loop.run_in_executor(
+            thread_pool_executor,
+            services.extract_bl_data,
+            request.openai_api_key,
+            request.pdf_base64
+        )
+
+        if not result["success"]:
+            error_msg = result.get("error", "Unknown error")
+            status_code = 502 if "OpenAI Error" in error_msg else 500
+            raise HTTPException(status_code=status_code, detail=error_msg)
+
+        return {
+            "success": True,
+            "extracted_bl": result["extracted_bl"]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as route_err:
+        logger.error(f"BL Route Error: {route_err}")
+        raise HTTPException(status_code=500, detail=f"Server Error: {str(route_err)}")

@@ -6,15 +6,17 @@ import signal
 import zipfile
 import subprocess
 import tempfile
-from PIL import Image
+import binascii
+from typing import List, Dict
+from PIL import Image, UnidentifiedImageError
 from pypdf import PdfWriter, PdfReader
 from docxtpl import DocxTemplate
 
 from core.config import logger
 
 
-def generate_docx(template_bytes: bytes, context: dict, images: list = None) -> bytes:
-    temp_image_paths = []
+def generate_docx(template_bytes: bytes, context: dict, images: List[Dict[str, str]] = None) -> bytes:
+    temp_image_paths: List[str] = []
     try:
         tpl = DocxTemplate(io.BytesIO(template_bytes))
         if images:
@@ -25,18 +27,12 @@ def generate_docx(template_bytes: bytes, context: dict, images: list = None) -> 
                 if not source or not placeholder:
                     continue
                 try:
-                    image_stream = None
-                    if source.startswith("data:image/"):
-                        _, b64_data = source.split(",", 1)
-                        image_bytes = base64.b64decode(b64_data)
+                    try:
+                        image_bytes = base64.b64decode(source)
                         image_stream = io.BytesIO(image_bytes)
-                    else:
-                        try:
-                            image_bytes = base64.b64decode(source)
-                            image_stream = io.BytesIO(image_bytes)
-                        except:
-                            logger.warning(f"Invalid image source format for {placeholder}")
-                            continue
+                    except (binascii.Error, ValueError) as b64_err:
+                        logger.warning(f"Invalid raw base64 for {placeholder}: {b64_err}")
+                        continue
                 
                     if image_stream:
                         fd, temp_path = tempfile.mkstemp(suffix=".png")
@@ -65,13 +61,20 @@ def generate_docx(template_bytes: bytes, context: dict, images: list = None) -> 
     except Exception as e:
         raise ValueError(f"Template Rendering Failed: {str(e)}")
 
+    finally:
+        for path in temp_image_paths:
+            try:
+                if os.path.exists(path):
+                    os.remove(path)
+            except OSError:
+                pass
+
 
 def convert_docx_to_pdf_unoconv(docx_data: bytes) -> bytes:
     with tempfile.TemporaryDirectory() as temp_dir:
         file_id = uuid.uuid4()
         temp_docx_path = os.path.join(temp_dir, f"{file_id}.docx")
         expected_pdf_path = os.path.join(temp_dir, f"{file_id}.pdf")
-        proc = None
 
         with open(temp_docx_path, "wb") as f:
             f.write(docx_data)
@@ -110,17 +113,19 @@ def convert_docx_to_pdf_unoconv(docx_data: bytes) -> bytes:
 
 def convert_image_to_pdf(image_bytes: bytes) -> io.BytesIO:
     """Convert image bytes to a single-page PDF."""
-    image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-    pdf_bytes = io.BytesIO()
-    image.save(pdf_bytes, format="PDF")
-    pdf_bytes.seek(0)
-    return pdf_bytes
+    try:
+        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        pdf_bytes = io.BytesIO()
+        image.save(pdf_bytes, format="PDF")
+        pdf_bytes.seek(0)
+        return pdf_bytes
+    except (UnidentifiedImageError, OSError) as img_err:
+        raise ValueError(f"Image conversion failed: {str(img_err)}")
 
-def merge_files_logic(files: list[dict]) -> dict:
+def merge_files_logic(files: List[Dict[str, str]]) -> Dict[str, str]:
+    temp_pdfs: List[str] = []
     try:
         pdf_writer = PdfWriter()
-        temp_pdfs = []
-        os.makedirs("output", exist_ok=True)
 
         supported_image_types = ["image/jpeg", "image/jpg", "image/png"]
         supported_pdf_type = "application/pdf"
@@ -134,12 +139,14 @@ def merge_files_logic(files: list[dict]) -> dict:
                 raise ValueError(f"Missing base64content for {filename}")
 
             try:
-                file_bytes = base64.b64decode(base64content.strip().split(",")[-1])
-            except Exception:
+                file_bytes = base64.b64decode(base64content.strip())
+            except (binascii.Error, ValueError):
                 raise ValueError(f"Invalid base64 data in {filename}")
 
             fd, temp_pdf_path = tempfile.mkstemp(suffix=".pdf")
             os.close(fd)
+
+            temp_pdfs.append(temp_pdf_path)
 
             if mimetype == supported_pdf_type or file_bytes[:4] == b"%PDF":
                 with open(temp_pdf_path, "wb") as f:
@@ -155,8 +162,6 @@ def merge_files_logic(files: list[dict]) -> dict:
 
             else:
                 raise ValueError(f"Unsupported file type '{mimetype}' for file '{filename}'.")
-
-            temp_pdfs.append(temp_pdf_path)
 
         for pdf_path in temp_pdfs:
             with open(pdf_path, "rb") as pdf_file:
@@ -181,5 +186,5 @@ def merge_files_logic(files: list[dict]) -> dict:
             try:
                 if os.path.exists(temp_file):
                     os.remove(temp_file)
-            except Exception:
+            except OSError:
                 pass
