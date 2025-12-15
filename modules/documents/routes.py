@@ -27,7 +27,7 @@ router = APIRouter()
     }
 )
 async def generate_report(
-        request: schemas.ReportRequest,
+        request: schemas.DocReportRequest,
         output_format: str = Query("docx", enum=["docx", "pdf"], title="", description="Output format: 'docx' (default) or 'pdf'.")
 ):
     try:
@@ -100,9 +100,9 @@ async def generate_report(
     "/merge_pdf",
     summary="Merge Files to PDF",
     description="Accepts a list of Base64 files (PDFs or Images), merges them into a single PDF, and returns the result as Base64.",
-    response_model=schemas.MergeResponse,
+    response_model=schemas.DocMergeResponse,
 )
-async def merge_base64_json(files: list[schemas.MergeFileItem] = Body(..., title="", description="List of files to merge.")):
+async def merge_base64_json(files: list[schemas.DocMergeItem] = Body(..., title="", description="List of files to merge.")):
     try:
         files_dict = [item.model_dump() for item in files]
         result = services.merge_files_logic(files_dict)

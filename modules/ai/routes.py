@@ -15,9 +15,9 @@ router = APIRouter()
     "/openai_extract",
     summary="Openai Extract",
     description="Accepts Base64 (PDF/Img), sends to OpenAI, returns structured JSON.",
-    response_model=schemas.ExtractionResponse
+    response_model=schemas.AIGenericExtractResponse
 )
-async def openai_extract(request: schemas.ExtractionRequest):
+async def openai_extract(request: schemas.AIGenericExtractRequest):
     """Extract data from PDF/JPEG/JPG/PNG files"""
     try:
         file_content = utils.extract_base64_content(request.p_input_content)
@@ -78,7 +78,7 @@ async def openai_extract(request: schemas.ExtractionRequest):
     "/scan_vc",
     summary="Scan Visiting Card",
     description="Upload image/PDF, performs OCR, then AI extraction and returns structured JSON.",
-    response_model=schemas.VCScanResponse
+    response_model=schemas.AIVisitingCardResponse
 )
 async def scan_visiting_card(
     file: UploadFile = File(..., title="", description="The visiting card file. Supports JPG, PNG, and PDF."),
@@ -147,9 +147,9 @@ async def scan_visiting_card(
     "/extract-bl",
     summary="Extract Bill of Lading",
     description="Extracts specific fields from a BL PDF using OpenAI Vision (gpt-4o-mini).",
-    response_model=schemas.BLResponse
+    response_model=schemas.AIBillOfLadingResponse
 )
-async def extract_bl(request: schemas.BLRequest):
+async def extract_bl(request: schemas.AIBillOfLadingRequest):
     try:
         if not request.pdf_base64:
             raise HTTPException(status_code=400, detail="PDF content is required")

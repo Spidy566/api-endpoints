@@ -15,7 +15,7 @@ router = APIRouter()
     "/aws_upload",
     summary="Upload PDF to S3",
     description="Expects base64-encoded PDF on body and 'x-file-name' on header.",
-    response_model=schemas.UploadResponse
+    response_model=schemas.AWSUploadResponse
 )
 async def upload_pdf(request: Request):
     try:
@@ -51,9 +51,9 @@ async def upload_pdf(request: Request):
     "/textract/aws_start_expense",
     summary="Start Expense Analysis",
     description="Starts Textract Expense Analysis on an S3 object.",
-    response_model=schemas.JobIdResponse
+    response_model=schemas.AWSJobIdResponse
 )
-def start_expense_analysis(req: schemas.TextractStartRequest):
+def start_expense_analysis(req: schemas.AWSTextractStartRequest):
     try:
         response = textract_client.start_expense_analysis(
             DocumentLocation={"S3Object": {"Bucket": req.bucket, "Name": req.file_name}}
@@ -87,7 +87,7 @@ def start_expense_analysis(req: schemas.TextractStartRequest):
     "/textract/aws_get_expense/{job_id}",
     summary="Get Expense Results",
     description="Polls and parses expense analysis results into Summary and Line Items.",
-    response_model=schemas.ExpenseResponse
+    response_model=schemas.AWSExpenseResponse
 )
 def get_expense_invoice_data(job_id: str = Path(..., title="", description="The Job ID returned by the 'start_expense' endpoint.")):
     try:
@@ -104,9 +104,9 @@ def get_expense_invoice_data(job_id: str = Path(..., title="", description="The 
     "/textract/aws_start_document",
     summary="Start Document Analysis",
     description="Starts generic Forms/Tables analysis on S3 object.",
-    response_model=schemas.JobIdResponse
+    response_model=schemas.AWSJobIdResponse
 )
-def start_textract(req: schemas.TextractStartRequest):
+def start_textract(req: schemas.AWSTextractStartRequest):
     try:
         response = textract_client.start_document_analysis(
             DocumentLocation={"S3Object": {"Bucket": req.bucket, "Name": req.file_name}},
@@ -141,7 +141,7 @@ def start_textract(req: schemas.TextractStartRequest):
     "/textract/aws_get_document_status/{job_id}",
     summary="Get Job Status",
     description="Returns the current status of a Textract document analysis job.",
-    response_model=schemas.StatusResponse
+    response_model=schemas.AWSJobStatusResponse
 )
 def get_status(job_id: str = Path(..., title="", description="The Job ID returned by the 'start_document' endpoint.")):
     try:
@@ -163,7 +163,7 @@ def get_status(job_id: str = Path(..., title="", description="The Job ID returne
     "/textract/aws_get_document_result/{job_id}",
     summary="Get Raw Pages",
     description="Returns the raw, paginated JSON response from AWS Textract.",
-    response_model=schemas.RawTextractResponse
+    response_model=schemas.AWSRawTextractResponse
 )
 def get_result(job_id: str = Path(..., title="", description="The Job ID returned by the 'start_document' endpoint.")):
     try:
@@ -191,7 +191,7 @@ def get_result(job_id: str = Path(..., title="", description="The Job ID returne
     "/textract/aws_get_document/{job_id}",
     summary="Get Vendor Invoice Data",
     description="Parses document analysis into Header Fields, Charges Table, and Container Table.",
-    response_model=schemas.VendorInvoiceResponse
+    response_model=schemas.AWSVendorInvoiceResponse
 )
 def get_vendor_invoice_data(job_id: str = Path(..., title="", description="The Job ID returned by the 'start_document' endpoint.")):
     try:
@@ -210,7 +210,7 @@ def get_vendor_invoice_data(job_id: str = Path(..., title="", description="The J
     '/manifest_extract',
     summary="Extract Cargo Manifest",
     description="Upload PDF or Image. Uses Textract + Regex parsing.",
-    response_model=schemas.ManifestResponse
+    response_model=schemas.AWSManifestResponse
 )
 async def extract_manifest(file: UploadFile = File(..., title="", description="The manifest file. Supports JPG, PNG, and PDF.")):
     if file.content_type not in ['application/pdf', 'image/jpeg', 'image/png', 'image/tiff']:

@@ -16,9 +16,9 @@ router = APIRouter()
     "/sign-invoice",
     summary="Sign Invoice",
     description="Digitally signs a PDF using a server-stored PFX certificate. Supports visual stamps and Adobe-compatible signatures.",
-    response_model=schemas.InvoiceSignResponse
+    response_model=schemas.SignCreationResponse
 )
-async def sign_invoice(request: schemas.InvoiceSignRequest):
+async def sign_invoice(request: schemas.SignCreationRequest):
     logger.info(f"Digital signature request for: {request.name}")
 
     try:
@@ -90,9 +90,9 @@ async def sign_invoice(request: schemas.InvoiceSignRequest):
     "/validate-signature",
     summary="Validate Signed PDF",
     description="Analyzes a PDF for digital signatures and verifies their integrity and trust status.",
-    response_model=schemas.ValidationResponse
+    response_model=schemas.SignValidationResponse
 )
-async def validate_signature(request: schemas.ValidationRequest):
+async def validate_signature(request: schemas.SignValidationRequest):
     try:
         try:
             pdf_data = base64.b64decode(request.signed_pdf_base64, validate=True)
@@ -124,7 +124,7 @@ async def validate_signature(request: schemas.ValidationRequest):
     "/upload_certificate",
     summary="Upload PFX Certificate",
     description="Upload a .pfx file to the server for use in signing. Requires 'overwrite=True' to replace existing certs.",
-    response_model=schemas.UploadCertResponse
+    response_model=schemas.SignCertUploadResponse
 )
 async def upload_certificate(
         file: UploadFile = File(..., title="", description="The .pfx certificate file."),

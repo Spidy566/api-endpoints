@@ -17,7 +17,7 @@ import extract_msg
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from core.config import logger, ALLOWED_EXTENSIONS, SHARED_SECRET_KEY
-from modules.email.schemas import SmtpConfig, EmailMessage
+from modules.email.schemas import EmailSmtpConfig, EmailSendMessage
 
 def allowed_file(filename: str) -> bool:
     """Check if uploaded file has allowed extension"""
@@ -303,7 +303,7 @@ class EmailAttachmentExtractor:
         return attachments
 
 
-def send_email_logic(smtp_config: SmtpConfig, email_message: EmailMessage) -> tuple[bool, str]:
+def send_email_logic(smtp_config: EmailSmtpConfig, email_message: EmailSendMessage) -> tuple[bool, str]:
     msg = MIMEMultipart('mixed')
     msg['Subject'] = email_message.Subject
     msg['From'] = str(email_message.From)

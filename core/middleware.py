@@ -61,7 +61,7 @@ async def log_and_count_requests(request: Request, call_next):
         "response_file": resp_file
     }
 
-    if len(request_logs[path]) > 1000:
+    if len(request_logs[path]) > 10000:
         request_logs[path].pop(0)
 
     request_logs[path].append(log_entry)

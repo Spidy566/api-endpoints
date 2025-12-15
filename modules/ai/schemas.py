@@ -2,7 +2,7 @@ from pydantic import BaseModel, field_validator, Field, ConfigDict
 from typing import Union, Dict, Any, List, Optional
 
 
-class ExtractionRequest(BaseModel):
+class AIGenericExtractRequest(BaseModel):
     p_input_content: str = Field(..., title="", description="Base64 encoded file (PDF/JPG/PNG)")
     p_api_name: str = Field(..., title="", description="Must be 'openai'", examples=["openai"])
     p_api_model: str = Field(..., title="", description="GPT Model ID", examples=["gpt-4o"])
@@ -40,11 +40,11 @@ class ExtractionRequest(BaseModel):
             raise ValueError(f"Unsupported model. Supported models: {', '.join(supported_models)}")
         return v
 
-class ExtractionResponse(BaseModel):
+class AIGenericExtractResponse(BaseModel):
     template_name: str = Field(..., title="", description="The template name provided in the request.")
     model_config = ConfigDict(extra='allow')
 
-class VCScanResponse(BaseModel):
+class AIVisitingCardResponse(BaseModel):
     success: bool = Field(..., title="", description="True if the process completed without system errors else False.")
     raw_text: str = Field(..., title="", description="The raw, unformatted text extracted by the OCR engine.")
     cleaned_text: str = Field(..., title="", description="Post-processed text (common OCR typos fixed).")
@@ -52,11 +52,11 @@ class VCScanResponse(BaseModel):
     model_used: str = Field(..., title="", description="The AI model used for the extraction.")
     error: Optional[str] = Field(default=None, title="", description="Error message if the AI or OCR failed.")
 
-class BLRequest(BaseModel):
+class AIBillOfLadingRequest(BaseModel):
     pdf_base64: str = Field(..., title="", description="Base64 encoded PDF string.")
     openai_api_key: str = Field(..., title="", description="Your OpenAI API Key.")
 
-class BLResponse(BaseModel):
+class AIBillOfLadingResponse(BaseModel):
     success: bool = Field(..., title="", description="Indicates whether the Bill of Lading extraction was successful.")
     extracted_bl: Dict[str, Any]  = Field(..., title="", description="The structured JSON object containing extracted fields (Shipper, Consignee, Containers, etc.).")
     error: Optional[str] = Field(default=None, title="", description="Detailed error message if the extraction failed, otherwise null.")

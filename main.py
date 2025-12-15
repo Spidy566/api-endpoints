@@ -25,7 +25,7 @@ from modules.logs.services import request_counts
 
 APP_TITLE = "Fresa Local testing"
 APP_VERSION = "2.0.0"
-APP_DESC = "Modularized API for Documents, AI, and Integrations"
+APP_DESC = "API Endpoints for Documents, AI, and Integrations"
 
 templates = Jinja2Templates(directory="templates")
 

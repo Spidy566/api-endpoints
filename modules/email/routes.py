@@ -105,7 +105,7 @@ async def extract_attachments(file: UploadFile = File(..., title="", description
     description="Accepts a Base64 string of a .msg or .eml file and extracts attachments.",
     response_model=schemas.EmailExtractionResponse,
 )
-async def extract_attachments_base64(request: schemas.EmailBase64Request):
+async def extract_attachments_base64(request: schemas.EmailExtractionRequest):
     """Extract attachments from base64 EML/MSG input."""
     try:
         try:
@@ -141,9 +141,9 @@ async def extract_attachments_base64(request: schemas.EmailBase64Request):
     "/send_mail_using_customer_server",
     summary="Send Email (SMTP)",
     description="Sends an email (with optional attachments/HTML) using provided SMTP credentials.",
-    response_model=schemas.SendEmailResponse,
+    response_model=schemas.EmailSendResponse,
 )
-async def send_email_endpoint(request: schemas.EmailRequest):
+async def send_email_endpoint(request: schemas.EmailSendRequest):
     success, message = services.send_email_logic(request.smtp_config, request.message)
 
     if success:
