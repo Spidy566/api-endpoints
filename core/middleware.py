@@ -16,14 +16,21 @@ async def log_and_count_requests(request: Request, call_next):
     resp_file = None
 
     try:
+        content_type = request.headers.get("content-type", "")
+        is_binary = any(t in content_type for t in ["multipart/form-data", "application/pdf", "image/", "application/octet-stream"])
         req_body = await request.body()
-        if req_body:
-            req_json = req_body.decode("utf-8")
-            req_filename = f"{uuid.uuid4()}_request.json"
-            req_file_path = LOGS_DIR / req_filename
-            with open(req_file_path, "w", encoding="utf-8") as f:
-                f.write(req_json)
-            req_file = str(req_file_path)
+        if req_body and not is_binary:
+            try:
+                req_json = req_body.decode("utf-8")
+                req_filename = f"{uuid.uuid4()}_request.json"
+                req_file_path = LOGS_DIR / req_filename
+                with open(req_file_path, "w", encoding="utf-8") as f:
+                    f.write(req_json)
+                req_file = str(req_file_path)
+            except UnicodeDecodeError:
+                logger.warning(f"Middleware: Body content could not be decoded as UTF-8 for {path}")
+        elif is_binary:
+            req_file = "BINARY_FILE_UPLOAD_SKIPPED"
     except Exception as e:
         logger.warning(f"Middleware: Failed to log request body: {e}")
 
@@ -48,6 +55,7 @@ async def log_and_count_requests(request: Request, call_next):
                     f.write(resp_json)
                 resp_file = str(resp_file_path)
             except UnicodeDecodeError:
+                resp_file = "BINARY_RESPONSE_SKIPPED"
                 pass
     except Exception as e:
         logger.warning(f"Middleware: Failed to log response body: {e}")
