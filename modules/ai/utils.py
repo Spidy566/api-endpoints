@@ -189,3 +189,58 @@ def clean_card_text(text: str) -> str:
     for k, v in replacements.items():
         text = text.replace(k, v)
     return "\n".join([ln.strip() for ln in text.splitlines() if ln.strip()])
+
+def image_for_bl(pdf_base64: str) -> List[str]:
+    """PDF → JPEG conversion for Bill of Lading / Shipping documents."""
+    try:
+        pdf_bytes = base64.b64decode(pdf_base64)
+        pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
+
+        if pdf_document.page_count == 0:
+            raise Exception("PDF has no pages")
+
+        images: List[str] = []
+        logger.info(f"BL Extraction: {pdf_document.page_count} page(s)")
+
+        mat = fitz.Matrix(2.0, 2.0)
+
+        for page_index in range(pdf_document.page_count):
+            page = pdf_document[page_index]
+
+            pix = page.get_pixmap(matrix=mat, alpha=False)
+
+            image = Image.frombytes(
+                "RGB",
+                (pix.width, pix.height),
+                pix.samples
+            )
+
+            max_dim = max(image.size)
+            if max_dim > 1600:
+                scale = 1600 / max_dim
+                new_size = (
+                    int(image.size[0] * scale),
+                    int(image.size[1] * scale)
+                )
+                image = image.resize(new_size, Image.Resampling.BILINEAR)
+
+            output_buffer = io.BytesIO()
+            image.save(
+                output_buffer,
+                format="JPEG",
+                quality=80,
+                optimize=True,
+                progressive=True
+            )
+
+            images.append(
+                base64.b64encode(output_buffer.getvalue()).decode("utf-8")
+            )
+
+            output_buffer.close()
+
+        pdf_document.close()
+        return images
+
+    except Exception as bl_err:
+        raise Exception(f"BL PDF conversion failed: {str(bl_err)}")

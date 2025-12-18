@@ -196,7 +196,7 @@ def extract_bl_data(api_key: str, pdf_base64: str) -> Dict[str, Any]:
             if not clean_b64:
                 return {"success": False, "error": "Invalid base64 provided"}
 
-            base64_images = utils.convert_pdf_to_jpeg(clean_b64)
+            base64_images = utils.image_for_bl(clean_b64)
         except Exception as conv_err:
             return {"success": False, "error": f"PDF Conversion failed: {str(conv_err)}"}
 
@@ -217,7 +217,7 @@ def extract_bl_data(api_key: str, pdf_base64: str) -> Dict[str, Any]:
             })
 
         payload = {
-            "model": "gpt-4o-mini",
+            "model": "gpt-4o",
             "messages": [
                 {"role": "system", "content": prompts.BL_EXTRACTION_SYSTEM},
                 {"role": "user", "content": vision_content}

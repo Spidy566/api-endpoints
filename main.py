@@ -7,7 +7,7 @@ from fastapi.exceptions import ResponseValidationError
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from core.config import logger, CERT_DIR
+from core.config import logger, CERT_DIR, APP_TITLE, APP_VERSION, APP_DESC
 from core.dependencies import process_pool_executor, thread_pool_executor
 from core.security import verify_credentials
 from core.middleware import log_and_count_requests
@@ -23,9 +23,6 @@ from modules.logs import routes as logs_routes
 from modules.signature import routes as signature_routes
 from modules.logs.services import request_counts
 
-APP_TITLE = "Fresa Local testing"
-APP_VERSION = "2.0.0"
-APP_DESC = "API Endpoints for Documents, AI, and Integrations"
 
 templates = Jinja2Templates(directory="templates")
 

@@ -13,5 +13,5 @@ class LogEntry(BaseModel):
 
 class LogResponse(BaseModel):
     endpoint: str = Field(..., title="", description="The endpoint path being queried.")
-    request_count: int =Field(..., title="", description="Total number of requests recorded for this endpoint since server start.")
+    request_count: int = Field(..., title="", description="Total number of requests recorded for this endpoint since server start.")
     logs: List[LogEntry] = Field(..., title="", description="List of log entries for this endpoint.")

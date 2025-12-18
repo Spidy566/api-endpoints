@@ -23,6 +23,10 @@ SHARED_SECRET_KEY = os.getenv("SHARED_SECRET_KEY")
 API_USERNAME = os.getenv("API_USERNAME")
 API_PASSWORD = os.getenv("API_PASSWORD")
 
+APP_TITLE = os.getenv("APP_TITLE")
+APP_VERSION = os.getenv("APP_VERSION")
+APP_DESC = os.getenv("APP_DESC")
+
 ALLOWED_EXTENSIONS = {'msg', 'eml'}
 
 LOGS_DIR = BASE_DIR / "logs"

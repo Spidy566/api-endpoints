@@ -51,52 +51,193 @@ Cleaned OCR:
 \"\"\"{cleaned_text}\"\"\"
 """
 
-BL_EXTRACTION_SYSTEM = "You are a data extraction engine. You strictly output JSON based on the provided schema."
+BL_EXTRACTION_SYSTEM = """
+You are a data extraction engine.
+
+CRITICAL RULES (MANDATORY):
+1. Output ONLY valid JSON.
+2. Do NOT include explanations, markdown, or comments.
+3. All strings MUST be valid JSON strings.
+4. Escape all backslashes as \\ .
+5. Represent line breaks ONLY as \\n .
+6. Do NOT use smart quotes (“ ” ‘ ’).
+7. Use null for missing fields, not "null".
+8. Keep all values as strings unless explicitly null.
+9. Do NOT guess or infer missing data.
+10. Ensure JSON is syntactically valid and parsable.
+11. For phone numbers, container numbers, seal numbers, GST numbers,
+  voyage numbers, and bill numbers:
+  COPY EXACTLY as seen.
+12. Do NOT correct, infer, or normalize numbers.
+13. If any digit is unclear, return the full value as null.
+14. Never guess missing digits.
+
+If you cannot extract a field, set it to null.
+If you are unsure, set it to null.
+
+"""
 
 BL_EXTRACTION_USER = """
-You are a logistics document expert. Extract data from this Bill of Lading (BL) into the specific JSON format defined below.
+You are a senior logistics documentation expert.
 
-INSTRUCTIONS FOR HANDLING DIFFERENT LAYOUTS:
-1. **Labels:** Look for synonyms. 
-   - "Consignor" = "Shipper" = "From"
-   - "MBL/MTD no" = "B/L No" = "Bill of Lading No" = "Document No"
-   - "Notify Party" = "Notify" = "Notify Address"
-2. **Structure:** If fields (like Goods Description) span multiple lines or pages, combine them into a single string.
-3. **Addresses:** Join address lines with a "\\n" character.
-4. **Data Types:** Keep all values as strings. Maintain commas in numbers (e.g., "2,500.00").
-5. **Containers:** Extract all containers listed in the container/marks table section into the `container` array.
+Your task is to extract structured data from a Bill of Lading document.
+The document may be HBL, MBL, or OBL and may have different layouts.
 
-REQUIRED JSON OUTPUT STRUCTURE:
-Return ONLY valid JSON. Do not include markdown formatting.
+IMPORTANT JSON SAFETY INSTRUCTIONS:
+
+- You MUST return a single JSON object only.
+- Do NOT wrap output in ``` fences.
+- Do NOT include any text before or after the JSON.
+- Escape every backslash as \\ .
+- Represent multi-line text using \\n only.
+- Do NOT include raw line breaks inside strings.
+- Do NOT include trailing commas.
+- Ensure all quotes are standard ASCII quotes (").
+
+If these rules are violated, the output will be rejected.
+
+HIGH-RISK FIELDS (COPY WITH EXTREME CARE):
+- Mobile numbers
+- GST / TAX numbers
+- Container numbers
+- Seal numbers
+- Voyage numbers
+
+These values MUST be copied character-by-character.
+If unclear, return null.
+
+GENERAL RULES:
+1. Treat HBL / MBL / OBL equally.
+2. Combine multi-line cell content using "\\n".
+3. Preserve original wording exactly.
+4. Keep ALL values as strings.
+5. If a field does not exist, return null.
+6. Do NOT infer or guess missing values.
+
+FIELD MATCHING RULES:
+- Bill of Lading Number:
+  "B/L No", "Bill of Lading No", "HBL No", "MBL No", "Document No"
+- Shipper:
+  "Shipper", "Consignor"
+- Consignee:
+  "Consignee"
+- Notify:
+  "Notify Party", "Notify Address"
+- Also Notify:
+  "Also Notify", "Routing Instructions"
+- Vessel:
+  May appear as Vessel, Voyage, Exporting Carrier (combine into one field)
+
+ADDRESS RULE:
+Join name and address lines using "\\n".
+
+MARKS AND NUMBERS RULE (MANDATORY):
+
+- Preserve headings and labels such as:
+  "PO NO & DATE", "CONTAINER NO", "SEAL NO", "CUSTOM SEAL"
+- Output format example:
+  "PO NO & DATE: 12345 / 12-APR-24\nCONTAINER NO: CSNU2431270\nSEAL NO: SEAL22345"
+- Do NOT drop labels.
+
+SEAL NUMBER RULE:
+- Use the SAME seal number across all sections if repeated.
+- Do NOT invent new seal numbers.
+- If conflicting seal numbers exist, prefer:
+  1) Container table
+  2) Marks & Numbers
+
+
+cargo_description MUST ALWAYS be an array of objects with EXACTLY these 5 keys:
+- marks_and_numbers
+- number_of_packages
+- description_of_packages_and_goods
+- gross_weight_kgs
+- net_weight_kgs
+- measurement
+
+DO NOT add or remove keys.
+
+
+IMPORTANT NORMALIZATION RULES (MANDATORY):
+
+1. "cargo_description" MUST represent GOODS / PACKAGES, NOT containers.
+2. If a row contains both container info AND package info:
+   - Extract PACKAGE data into cargo_description
+   - Extract CONTAINER data ONLY into container_details
+3. "number_of_packages":
+   - MUST be quantity + kind (e.g., "391 CARTONS", "180 PACKAGES")
+   - MUST NOT be "1 CNT", "1 CONTAINER"
+4. If only container count is shown in the Packages column:
+   - Look inside Description of Goods for cartons / packages
+   - Use that value instead
+5. Each cargo_description object MUST represent one logical goods line,
+   even if the container count is 1.
+
+
+CONTAINER DETAILS TABLE (IF PRESENT):
+Extract each row into container_details array with:
+- Container No
+- Container Type
+- Seal No
+- Number of Pcs
+- Gross Weight
+- Measurement
+
+TOTALS:
+If totals are mentioned at the bottom:
+- total_packages
+- total_gross_weight
+
+OUTPUT:
+Return ONLY JSON exactly matching this schema:
 
 {
-  "mbl_mtd_no": "The main BL number",
-  "consignor_shipper": "Name\\nAddress Line 1\\nAddress Line 2...",
-  "consignee": "Name\\nAddress Line 1\\nAddress Line 2...",
-  "notify_party": "Name\\nAddress Line 1\\nAddress Line 2...",
-  "place_of_receipt": "City/Location where goods were received",
-  "port_of_loading": "Port Name",
-  "freight_payable_at": "Location",
-  "vessel": "Vessel Name and Voyage Number",
-  "port_of_discharge": "Port Name",
-  "place_of_delivery": "Final Delivery Location",
-  "number_of_original_bill_of_lading": "Count (e.g., 'THREE (3)')",
-  "mark_and_numbers": "Full text from the Marks & Numbers column",
-  "number_of_packages": "Total count (e.g., '721 CARTONS')",
-  "stc_kind_of_packages_description_of_goods_instructions": "Full body text describing goods, HS codes, etc.",
-  "gross_weight": "Total Gross Weight (e.g. '29,060.000')",
-  "measurements": "Total Volume/Measurement (e.g. '66.515')",
-  "shipped_onboard_date": "Date mentioned for Shipped on Board",
-  "place_and_date_issue": "Place and Date mentioned for Issue",
-  "delivery_agent": "Name and Address of Delivery/Release Agent",
-  "container": [
+  "bill_of_lading_number": "HBL / MBL / OBL number",
+  "shipper": "Name\nAddress lines",
+  "consignee": "Name\nAddress lines",
+  "notify_party": "Name\nAddress lines",
+  "notify_routing": "Text or null",
+
+  "place_of_receipt": "Location or null",
+  "place_of_acceptance": "Location or null",
+  "port_of_loading": "Port name or null",
+  "port_of_discharge": "Port name or null",
+  "place_of_delivery": "Location or null",
+  "freight_payable_at": "Location or null",
+
+  "vessel_and_voyage": "Vessel name / Voyage no / Carrier",
+  "number_of_original_bill_of_lading": "Count or null",
+
+  "place_and_date_of_issue": "Place\nDate",
+  "shipped_on_board": "Date or null",
+
+  "delivery_agent": "Name\nAddress or null",
+  "forwarding_agent": "Name\nAddress or null",
+
+  "cargo_description": [
     {
-      "container_no": "Container Number (e.g., ABCD1234567)",
-      "seal_no": "Seal Number",
-      "no_of_pcs": "Package count inside this container",
-      "gross_weight_kgs": "Weight for this specific container",
-      "net_weight_kgs": "Net weight if available, else null"
+      "marks_and_numbers": "Container no / Seal no / Marks",
+      "number_of_packages": "Quantity + Kind",
+      "description_of_packages_and_goods": "Full description text",
+      "gross_weight_kgs": "value or null",
+      "net_weight_kgs": "value or null",
+      "measurement": "CBM / Volume"
     }
-  ]
+  ],
+
+  "container_details": [
+    {
+      "container_no": "Container number",
+      "container_type": "Type",
+      "seal_no": "Seal number",
+      "number_of_pcs": "Pieces",
+      "gross_weight": "Weight",
+      "measurement": "Measurement"
+    }
+  ],
+
+  "total_packages": "Total packages or null",
+  "total_gross_weight": "Total weight or null"
 }
+
 """
