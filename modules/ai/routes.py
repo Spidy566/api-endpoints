@@ -146,7 +146,7 @@ async def scan_visiting_card(
 @router.post(
     "/extract-bl",
     summary="Extract Bill of Lading",
-    description="Extracts specific fields from a BL PDF using OpenAI Vision (gpt-4o-mini).",
+    description="Extracts specific fields from a BL Document using OpenAI Vision.",
     response_model=schemas.AIBillOfLadingResponse
 )
 async def extract_bl(request: schemas.AIBillOfLadingRequest):
