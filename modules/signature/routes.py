@@ -65,7 +65,9 @@ async def sign_invoice(request: schemas.SignCreationRequest):
                 "organization": cert_info['organization'],
                 "timestamp": datetime.now().isoformat(),
                 "reason": request.reason,
-                "verification_status": "Signature created successfully"
+                "location": request.location,
+                "verification_status": "Signature created successfully",
+                "verification_note": f"Digitally signed by {request.name} at {request.location}. Integrity guaranteed."
             }
 
             return {

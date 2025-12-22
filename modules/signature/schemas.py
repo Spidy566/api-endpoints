@@ -23,7 +23,9 @@ class SignatureInfo(BaseModel):
     organization: Optional[str] = Field(default=None, title="", description="Organization of the signer.")
     timestamp: str = Field(..., title="", description="Timestamp of the signature.")
     reason: Optional[str] = Field(default=None, title="", description="Reason for signing the document.")
+    location: Optional[str] = Field(default=None, title="", description="The physical location where the signing took place.")
     verification_status: str = Field(..., title="", description="Status of the signature verification.")
+    verification_note: Optional[str] = Field(default=None, title="",description="A descriptive note about the signature context.")
 
 class SignCreationResponse(BaseModel):
     signed_pdf_base64: str = Field(..., title="", description="Base64 encoded string of the signed PDF file.")
