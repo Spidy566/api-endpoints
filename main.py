@@ -1,7 +1,7 @@
 import subprocess
 import uvicorn
 from contextlib import asynccontextmanager
-from fastapi import FastAPI, Request, Depends
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.exceptions import ResponseValidationError
 from fastapi.staticfiles import StaticFiles
@@ -9,7 +9,6 @@ from fastapi.templating import Jinja2Templates
 
 from core.config import logger, CERT_DIR, APP_TITLE, APP_VERSION, APP_DESC
 from core.dependencies import process_pool_executor, thread_pool_executor
-from core.security import verify_credentials
 from core.middleware import log_and_count_requests
 from core.handlers import validation_exception_handler
 from core.openapi import configure_openapi
@@ -60,8 +59,7 @@ app = FastAPI(
     docs_url="/docs",
     redoc_url=None,
     openapi_tags=TAGS_METADATA,
-    lifespan=lifespan,
-    dependencies=[Depends(verify_credentials)]
+    lifespan=lifespan
 )
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
