@@ -30,7 +30,7 @@ APP_DESC = os.getenv("APP_DESC")
 ALLOWED_EXTENSIONS = {'msg', 'eml'}
 
 LOGS_DIR = BASE_DIR / "logs"
-CERT_DIR = BASE_DIR / "cert"
+CERT_DIR = BASE_DIR / "certs"
 BACKUP_DIR = BASE_DIR / "backup"
 
 for directory in [LOGS_DIR, CERT_DIR, BACKUP_DIR]:
