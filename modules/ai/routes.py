@@ -144,14 +144,14 @@ async def scan_visiting_card(
 
 
 @router.post(
-    "/extract-bl",
+    "/extract_bl",
     summary="Extract Bill of Lading",
     description="Extracts specific fields from a BL Document using OpenAI Vision.",
     response_model=schemas.AIBillOfLadingResponse
 )
 async def extract_bl(request: schemas.AIBillOfLadingRequest):
     try:
-        if not request.pdf_base64:
+        if not request.base64_file:
             raise HTTPException(status_code=400, detail="PDF content is required")
 
         loop = asyncio.get_running_loop()
@@ -160,7 +160,8 @@ async def extract_bl(request: schemas.AIBillOfLadingRequest):
             thread_pool_executor,
             services.extract_bl_data,
             request.openai_api_key,
-            request.pdf_base64
+            request.base64_file,
+            request.model
         )
 
         if not result["success"]:

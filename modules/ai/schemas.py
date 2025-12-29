@@ -53,8 +53,10 @@ class AIVisitingCardResponse(BaseModel):
     error: Optional[str] = Field(default=None, title="", description="Error message if the AI or OCR failed.")
 
 class AIBillOfLadingRequest(BaseModel):
-    pdf_base64: str = Field(..., title="", description="Base64 encoded PDF string.")
+    base64_file: str = Field(..., title="", description="Base64 encoded string of the file (PDF, JPG, PNG).")
+    file_type: str = Field(..., title="", description="The file type extension.", examples=["pdf", "jpg", "png"])
     openai_api_key: str = Field(..., title="", description="Your OpenAI API Key.")
+    model: str = Field(default="gpt-4o", title="", description="The OpenAI model to use (e.g., gpt-4o).")
 
 class AIBillOfLadingResponse(BaseModel):
     success: bool = Field(..., title="", description="Indicates whether the Bill of Lading extraction was successful.")

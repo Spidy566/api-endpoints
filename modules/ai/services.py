@@ -188,11 +188,11 @@ def extract_card_json_with_openai(api_key: str, model: str, raw_text: str, clean
         return {"error": f"Failed to parse JSON: {parse_err}", "raw": text[:1000]}
 
 
-def extract_bl_data(api_key: str, pdf_base64: str) -> Dict[str, Any]:
+def extract_bl_data(api_key: str, base64_file: str, model: str) -> Dict[str, Any]:
     """Bill of Lading Extraction"""
     try:
         try:
-            clean_b64 = utils.extract_base64_content(pdf_base64)
+            clean_b64 = utils.extract_base64_content(base64_file)
             if not clean_b64:
                 return {"success": False, "error": "Invalid base64 provided"}
 
@@ -217,7 +217,7 @@ def extract_bl_data(api_key: str, pdf_base64: str) -> Dict[str, Any]:
             })
 
         payload = {
-            "model": "gpt-4o",
+            "model": model,
             "messages": [
                 {"role": "system", "content": prompts.BL_EXTRACTION_SYSTEM},
                 {"role": "user", "content": vision_content}
