@@ -117,19 +117,18 @@ GENERAL RULES:
 FIELD MATCHING RULES:
 - Bill of Lading Number:
   "B/L No", "Bill of Lading No", "HBL No", "MBL No", "Document No"
-- Shipper:
-  "Shipper", "Consignor"
-- Consignee:
-  "Consignee"
-- Notify:
-  "Notify Party", "Notify Address"
-- Also Notify:
-  "Also Notify", "Routing Instructions"
-- Vessel:
-  May appear as Vessel, Voyage, Exporting Carrier (combine into one field)
-
-ADDRESS RULE:
-Join name and address lines using "\\n".
+- Shipper / Consignee / Notify / Delivery Agent / Forwarding Agent:
+  Try to separate the Entity Name from the Address. If they are indistinguishable, put the first line in Name and the rest in Address.
+- VESSEL & VOYAGE (SPLIT REQUIRED):
+   - The document often combines these (e.g., "MSC ALICE / 234W" or "MSC ALICE V.234W").
+   - You MUST separate them into two distinct fields: "vessel_name" and "voyage_number".
+   - If only one string exists, determine if it is a name or a number.
+- FREIGHT TERMS:
+   - Look for keywords: "Freight Prepaid", "Freight Collect", "Prepaid", "Collect".
+   - Extract the specific term found.
+- TYPE OF SERVICE / MOVE:
+   - Look for keywords: "FCL/FCL", "LCL/LCL", "CY/CY", "CFS/CFS", "Door to Door".
+   - Extract the movement type exactly as it appears.
 
 MARKS AND NUMBERS RULE (MANDATORY):
 
@@ -146,18 +145,6 @@ SEAL NUMBER RULE:
   1) Container table
   2) Marks & Numbers
 
-
-cargo_description MUST ALWAYS be an array of objects with EXACTLY these 5 keys:
-- marks_and_numbers
-- number_of_packages
-- description_of_packages_and_goods
-- gross_weight_kgs
-- net_weight_kgs
-- measurement
-
-DO NOT add or remove keys.
-
-
 IMPORTANT NORMALIZATION RULES (MANDATORY):
 
 1. "cargo_description" MUST represent GOODS / PACKAGES, NOT containers.
@@ -173,15 +160,24 @@ IMPORTANT NORMALIZATION RULES (MANDATORY):
 5. Each cargo_description object MUST represent one logical goods line,
    even if the container count is 1.
 
+cargo_description MUST ALWAYS be an array of objects with EXACTLY these 6 keys:
+- marks_and_numbers
+- number_of_packages
+- description_of_goods
+- gross_weight
+- net_weight
+- measurement
+
+DO NOT add or remove keys.
 
 CONTAINER DETAILS TABLE (IF PRESENT):
 Extract each row into container_details array with:
-- Container No
-- Container Type
-- Seal No
-- Number of Pcs
-- Gross Weight
-- Measurement
+- container_number
+- container_type
+- seal_number
+- number_of_pcs
+- gross_weight
+- measurement
 
 TOTALS:
 If totals are mentioned at the bottom:
@@ -193,9 +189,12 @@ Return ONLY JSON exactly matching this schema:
 
 {
   "bill_of_lading_number": "HBL / MBL / OBL number",
-  "shipper": "Name\nAddress lines",
-  "consignee": "Name\nAddress lines",
-  "notify_party": "Name\nAddress lines",
+  "shipper_name": "Name",
+  "shipper_address": "Address lines",
+  "consignee_name": "Name",
+  "consignee_address": "Address lines",
+  "notify_party_name": "Name",
+  "notify_party_address": "Address lines",
   "notify_routing": "Text or null",
 
   "place_of_receipt": "Location or null",
@@ -204,32 +203,39 @@ Return ONLY JSON exactly matching this schema:
   "port_of_discharge": "Port name or null",
   "place_of_delivery": "Location or null",
   "freight_payable_at": "Location or null",
+  
+  "vessel_name": "Name of vessel only",
+  "voyage_number": "Voyage number only",
+  
+  "freight_terms": "Prepaid / Collect",
+  "service_type": "FCL, LCL, FTL, LSE, LTL, etc or null",
+  "number_of_original_bls": "Count or null",
 
-  "vessel_and_voyage": "Vessel name / Voyage no / Carrier",
-  "number_of_original_bill_of_lading": "Count or null",
-
-  "place_and_date_of_issue": "Place\nDate",
+  "place_of_issue": "Place",
+  "date_of_issue": "Date",
   "shipped_on_board": "Date or null",
 
-  "delivery_agent": "Name\nAddress or null",
-  "forwarding_agent": "Name\nAddress or null",
+  "delivery_agent_name": "Name",
+  "delivery_agent_address": "Address or null",
+  "forwarding_agent_name": "Name",
+  "forwarding_agent_address": "Address or null",
 
   "cargo_description": [
     {
       "marks_and_numbers": "Container no / Seal no / Marks",
       "number_of_packages": "Quantity + Kind",
-      "description_of_packages_and_goods": "Full description text",
-      "gross_weight_kgs": "value or null",
-      "net_weight_kgs": "value or null",
+      "description_of_goods": "Full description text",
+      "gross_weight": "value or null",
+      "net_weight": "value or null",
       "measurement": "CBM / Volume"
     }
   ],
 
   "container_details": [
     {
-      "container_no": "Container number",
+      "container_number": "Container number",
       "container_type": "Type",
-      "seal_no": "Seal number",
+      "seal_number": "Seal number",
       "number_of_pcs": "Pieces",
       "gross_weight": "Weight",
       "measurement": "Measurement"
@@ -237,7 +243,8 @@ Return ONLY JSON exactly matching this schema:
   ],
 
   "total_packages": "Total packages or null",
-  "total_gross_weight": "Total weight or null"
+  "total_gross_weight": "Total weight or null",
+  "total_volume": "Total volume or null"
 }
 
 """
