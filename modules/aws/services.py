@@ -92,7 +92,8 @@ class CargoManifestExtractor:
                 cells = [block_map[cid] for table_rel in bik.get('Relationships', []) if table_rel['Type'] == 'CHILD' for cid in table_rel['Ids']]
                 rows = {}
                 for cell in cells:
-                    if cell['BlockType'] != 'CELL': continue
+                    if cell['BlockType'] != 'CELL':
+                        continue
                     r, cidx = cell.get('RowIndex', 0), cell.get('ColumnIndex', 0)
                     rows.setdefault(r, {})[cidx] = get_text(cell)
                 matrix = [[rows[r][c] for c in sorted(rows[r].keys())] for r in sorted(rows.keys())]
@@ -100,7 +101,8 @@ class CargoManifestExtractor:
 
         parsed_tables = []
         for t_matrix in tables:
-            if not t_matrix: continue
+            if not t_matrix:
+                continue
             if len(t_matrix[0]) == 2:
                 parsed_tables.append({row[0]: row[1] for row in t_matrix})
             else:

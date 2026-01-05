@@ -72,7 +72,7 @@ async def extract_attachments(file: UploadFile = File(..., title="", description
             logger.info(
                 f"RESPONSE: Added attachment {i + 1}: {attachment['filename']} ({attachment['file_extension']}) (base64 length: {len(attachment['content'])})")
 
-        logger.info(f"FINAL RESPONSE CHECK:")
+        logger.info("FINAL RESPONSE CHECK:")
         logger.info(f"  total_attachments: {response_data['total_attachments']}")
         logger.info(f"  file_type_counts: {response_data['file_type_counts']}")
         logger.info(f"  attachments array length: {len(response_data['attachments'])}")

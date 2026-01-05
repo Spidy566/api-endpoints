@@ -1,5 +1,6 @@
 import os
 import logging
+import importlib.util
 from pathlib import Path
 from dotenv import load_dotenv
 
@@ -36,17 +37,15 @@ BACKUP_DIR = BASE_DIR / "backup"
 for directory in [LOGS_DIR, CERT_DIR, BACKUP_DIR]:
     os.makedirs(directory, exist_ok=True)
 
-try:
-    import easyocr
+if importlib.util.find_spec("easyocr") is not None:
     HAS_EASYOCR = True
-except ImportError:
+else:
     HAS_EASYOCR = False
     logger.warning("EasyOCR not found. Visiting card OCR might be limited.")
 
-try:
-    import pytesseract
+if importlib.util.find_spec("pytesseract") is not None:
     HAS_TESSERACT = True
-except ImportError:
+else:
     HAS_TESSERACT = False
     logger.warning("Pytesseract not found.")
 

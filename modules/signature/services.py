@@ -22,14 +22,17 @@ from core.dependencies import thread_pool_executor
 def get_cert_path(name: str) -> Optional[Path]:
     """Finds a .pfx file in the certs directory matching the name."""
     cert_path = CERT_DIR / f"{name}.pfx"
-    if cert_path.exists(): return cert_path
+    if cert_path.exists():
+        return cert_path
 
     cert_path = CERT_DIR / f"{name.lower()}.pfx"
-    if cert_path.exists(): return cert_path
+    if cert_path.exists():
+        return cert_path
 
     name_safe = name.lower().replace(" ", "_")
     cert_path = CERT_DIR / f"{name_safe}.pfx"
-    if cert_path.exists(): return cert_path
+    if cert_path.exists():
+        return cert_path
 
     return None
 

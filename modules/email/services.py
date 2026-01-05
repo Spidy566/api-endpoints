@@ -73,15 +73,18 @@ class EmailAttachmentExtractor:
 
     @staticmethod
     def is_supported_file(filename: Optional[str], content_type: Optional[str] = None) -> bool:
-        if not filename: return False
+        if not filename:
+            return False
 
         file_ext = '.' + filename.lower().split('.')[-1] if '.' in filename else ''
 
-        if file_ext in EmailAttachmentExtractor.SUPPORTED_EXTENSIONS: return True
+        if file_ext in EmailAttachmentExtractor.SUPPORTED_EXTENSIONS:
+            return True
         if content_type:
             content_lower = content_type.lower()
             for ext, mime in EmailAttachmentExtractor.MIME_TYPE_MAP.items():
-                if mime.lower() in content_lower: return True
+                if mime.lower() in content_lower:
+                    return True
         return False
 
     @staticmethod
@@ -92,20 +95,24 @@ class EmailAttachmentExtractor:
 
     @staticmethod
     def validate_file_content(data: bytes, expected_extension: str) -> bool:
-        if not data or len(data) < 4: return False
+        if not data or len(data) < 4:
+            return False
         signatures = EmailAttachmentExtractor.FILE_SIGNATURES.get(expected_extension, [])
         for signature in signatures:
-            if data.startswith(signature): return True
+            if data.startswith(signature):
+                return True
         return False
 
     @staticmethod
     def get_default_filename(index: int, extension: str, content_type: Optional[str] = None) -> str:
         base_name = f"attachment_{index}"
-        if extension and extension != '.unknown': return f"{base_name}{extension}"
+        if extension and extension != '.unknown':
+            return f"{base_name}{extension}"
         elif content_type:
             content_lower = content_type.lower()
             for ext, mime in EmailAttachmentExtractor.MIME_TYPE_MAP.items():
-                if mime.lower() in content_lower: return f"{base_name}{ext}"
+                if mime.lower() in content_lower:
+                    return f"{base_name}{ext}"
         return f"{base_name}.bin"
 
     @staticmethod
@@ -340,7 +347,8 @@ def send_email_logic(smtp_config: EmailSmtpConfig, email_message: EmailSendMessa
     if email_message.Attachments:
         for attachment_data in email_message.Attachments:
             content_type, _ = mimetypes.guess_type(attachment_data.Filename)
-            if content_type is None: content_type = 'application/octet-stream'
+            if content_type is None:
+                content_type = 'application/octet-stream'
             main_type, sub_type = content_type.split('/', 1)
 
             try:
