@@ -119,6 +119,11 @@ FIELD MATCHING RULES:
   "B/L No", "Bill of Lading No", "HBL No", "MBL No", "Document No"
 - Shipper / Consignee / Notify / Delivery Agent / Forwarding Agent:
   Try to separate the Entity Name from the Address. If they are indistinguishable, put the first line in Name and the rest in Address.
+- Delivery Agent / Forwarding Agent (STRICT VALIDATION):
+  - Extract Name and Address if present.
+  - **CRITICAL**: Do NOT populate this field with labels such as "Ocean Freight", "Freight Payable", "Ex. Rate", or financial terms. 
+  - If the "Delivery Agent" box is blank, return null. 
+  - Do NOT grab text from the adjacent cell (right or left) just because the agent field is empty.
 - VESSEL & VOYAGE (SPLIT REQUIRED):
    - The document often combines these (e.g., "MSC ALICE / 234W" or "MSC ALICE V.234W").
    - You MUST separate them into two distinct fields: "vessel_name" and "voyage_number".
@@ -127,7 +132,7 @@ FIELD MATCHING RULES:
    - Look for keywords: "Freight Prepaid", "Freight Collect", "Prepaid", "Collect".
    - Extract the specific term found.
 - TYPE OF SERVICE / MOVE:
-   - Look for keywords: "FCL/FCL", "LCL/LCL", "CY/CY", "CFS/CFS", "Door to Door".
+   - Look for keywords: "FCL, LCL, FTL, LSE, LTL or null".
    - Extract the movement type exactly as it appears.
 
 MARKS AND NUMBERS RULE (MANDATORY):
@@ -179,10 +184,19 @@ Extract each row into container_details array with:
 - gross_weight
 - measurement
 
-TOTALS:
-If totals are mentioned at the bottom:
-- total_packages
-- total_gross_weight
+TOTALS (CRITICAL):
+Look for the summary/totals usually found at the bottom of the goods description or in dedicated total boxes. Extract:
+1. EXPLICIT TOTALS: Look for labels like "Total", "Total Gross Weight", "Grand Total".
+2. COLUMN FOOTER LOGIC (MANDATORY):
+   - Documents often list weights/measurements in columns with headers like "SAID TO WEIGH", "GROSS WEIGHT", "SAID TO MEASURE", or "MEASUREMENT".
+   - If there is no row labeled "Total", check the BOTTOM value of these columns.
+   - If a value appears at the bottom of the "SAID TO WEIGH" column acting as a sum, extract it as `total_gross_weight`.
+   - If a value appears at the bottom of the "SAID TO MEASURE" column acting as a sum, extract it as `total_measurement`.
+   - Do NOT confuse these column totals with individual line item weights.
+- total_packages (The grand total quantity)
+- total_gross_weight (Grand total KGS)
+- total_net_weight (Grand total KGS)
+- total_measurement (Grand total CBM/Volume)
 
 OUTPUT:
 Return ONLY JSON exactly matching this schema:
@@ -208,7 +222,7 @@ Return ONLY JSON exactly matching this schema:
   "voyage_number": "Voyage number only",
   
   "freight_terms": "Prepaid / Collect",
-  "service_type": "FCL, LCL, FTL, LSE, LTL, etc or null",
+  "service_type": "FCL, LCL, FTL, LSE, LTL or null",
   "number_of_original_bls": "Count or null",
 
   "place_of_issue": "Place",
@@ -242,9 +256,10 @@ Return ONLY JSON exactly matching this schema:
     }
   ],
 
-  "total_packages": "Total packages or null",
-  "total_gross_weight": "Total weight or null",
-  "total_volume": "Total volume or null"
+  "total_packages": "Total packages text or null",
+  "total_gross_weight": "Total gross weight text or null",
+  "total_net_weight": "Total net weight text or null",
+  "total_measurement": "Total volume text or null"
 }
 
 """
