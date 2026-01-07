@@ -191,12 +191,12 @@ Look for the summary/totals usually found at the bottom of the goods description
    - Documents often list weights/measurements in columns with headers like "SAID TO WEIGH", "GROSS WEIGHT", "SAID TO MEASURE", or "MEASUREMENT".
    - If there is no row labeled "Total", check the BOTTOM value of these columns.
    - If a value appears at the bottom of the "SAID TO WEIGH" column acting as a sum, extract it as `total_gross_weight`.
-   - If a value appears at the bottom of the "SAID TO MEASURE" column acting as a sum, extract it as `total_measurement`.
+   - If a value appears at the bottom of the "SAID TO MEASURE" column acting as a sum, extract it as `total_volume`.
    - Do NOT confuse these column totals with individual line item weights.
 - total_packages (The grand total quantity)
 - total_gross_weight (Grand total KGS)
 - total_net_weight (Grand total KGS)
-- total_measurement (Grand total CBM/Volume)
+- total_volume (Grand total CBM/Volume)
 
 OUTPUT:
 Return ONLY JSON exactly matching this schema:
@@ -259,7 +259,7 @@ Return ONLY JSON exactly matching this schema:
   "total_packages": "Total packages text or null",
   "total_gross_weight": "Total gross weight text or null",
   "total_net_weight": "Total net weight text or null",
-  "total_measurement": "Total volume text or null"
+  "total_volume": "Total volume text or null"
 }
 
 """
