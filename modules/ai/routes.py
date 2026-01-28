@@ -179,3 +179,41 @@ async def extract_bl(request: schemas.AIBillOfLadingRequest):
     except Exception as route_err:
         logger.error(f"BL Route Error: {route_err}")
         raise HTTPException(status_code=500, detail=f"Server Error: {str(route_err)}")
+
+@router.post(
+    "/extract_document",
+    summary="Process Any Document",
+    description="Extracts data from any document (Invoice, Packing List, etc) using custom prompts.",
+    response_model=schemas.AIExtractDocumentResponse
+)
+async def extract_document(request: schemas.AIExtractDocumentRequest):
+    try:
+        if not request.base64_file:
+            raise HTTPException(status_code=400, detail="File content is required")
+
+        loop = asyncio.get_running_loop()
+
+        result = await loop.run_in_executor(
+            thread_pool_executor,
+            services.extract_document,
+            request.openai_api_key,
+            request.base64_file,
+            request.model,
+            request.system_prompt_b64,
+            request.user_prompt_b64
+        )
+
+        if not result["success"]:
+            error_msg = result.get("error", "Unknown error")
+            status_code = 502 if "OpenAI Error" in error_msg else 500
+            raise HTTPException(status_code=status_code, detail=error_msg)
+
+        return {
+            "success": True,
+            "extracted_data": result["extracted_data"]
+        }
+
+    except HTTPException:
+        raise
+    except Exception as route_err:
+        raise HTTPException(status_code=500, detail=f"Server Error: {str(route_err)}")

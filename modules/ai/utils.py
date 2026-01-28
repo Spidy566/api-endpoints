@@ -40,7 +40,6 @@ def extract_base64_content(file_content: str) -> Optional[str]:
     except (binascii.Error, ValueError):
         return None
 
-
 def detect_and_validate_format(base64_content: str) -> str:
     """Detect and validate file format - only PDF, JPEG, JPG, PNG allowed"""
     format_signatures = {
@@ -190,8 +189,8 @@ def clean_card_text(text: str) -> str:
         text = text.replace(k, v)
     return "\n".join([ln.strip() for ln in text.splitlines() if ln.strip()])
 
-def image_for_bl(pdf_base64: str) -> List[str]:
-    """PDF → JPEG conversion for Bill of Lading / Shipping documents."""
+def extract_image(pdf_base64: str) -> List[str]:
+    """PDF → JPEG conversion."""
     try:
         pdf_bytes = base64.b64decode(pdf_base64)
         pdf_document = fitz.open(stream=pdf_bytes, filetype="pdf")
@@ -200,7 +199,7 @@ def image_for_bl(pdf_base64: str) -> List[str]:
             raise Exception("PDF has no pages")
 
         images: List[str] = []
-        logger.info(f"BL Extraction: {pdf_document.page_count} page(s)")
+        logger.info(f"Extracting: {pdf_document.page_count} page(s)")
 
         mat = fitz.Matrix(2.0, 2.0)
 
@@ -243,4 +242,30 @@ def image_for_bl(pdf_base64: str) -> List[str]:
         return images
 
     except Exception as bl_err:
-        raise Exception(f"BL PDF conversion failed: {str(bl_err)}")
+        raise Exception(f"PDF conversion failed: {str(bl_err)}")
+
+def decode_base64_string(b64_string: str) -> str:
+    """Decodes a Base64 string back to UTF-8 text."""
+    try:
+        if not b64_string:
+            return ""
+
+        decoded_bytes = base64.b64decode(b64_string)
+        return decoded_bytes.decode("utf-8")
+    except Exception as b64_err:
+        logger.error(f"Prompt decoding failed: {b64_err}")
+        return ""
+
+def clean_json_newlines(data):
+    """
+    Recursively replaces literal '\\n' strings with actual newline characters '\n'.
+    Works on Dicts, Lists, and Strings.
+    """
+    if isinstance(data, dict):
+        return {k: clean_json_newlines(v) for k, v in data.items()}
+    elif isinstance(data, list):
+        return [clean_json_newlines(i) for i in data]
+    elif isinstance(data, str):
+        return data.replace("\\n", "\n")
+    else:
+        return data

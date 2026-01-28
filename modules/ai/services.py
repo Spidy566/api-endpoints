@@ -196,7 +196,7 @@ def extract_bl_data(api_key: str, base64_file: str, model: str) -> Dict[str, Any
             if not clean_b64:
                 return {"success": False, "error": "Invalid base64 provided"}
 
-            base64_images = utils.image_for_bl(clean_b64)
+            base64_images = utils.extract_image(clean_b64)
         except Exception as conv_err:
             return {"success": False, "error": f"PDF Conversion failed: {str(conv_err)}"}
 
@@ -261,4 +261,93 @@ def extract_bl_data(api_key: str, base64_file: str, model: str) -> Dict[str, Any
 
     except Exception as e:
         logger.error(f"BL Extraction Error: {e}")
+        return {"success": False, "error": str(e)}
+
+def extract_document(api_key: str, base64_file: str, model: str, system_prompt_b64: str, user_prompt_b64: str) -> Dict[str, Any]:
+    """
+    Generic extraction using dynamic prompts.
+    """
+    try:
+        system_prompt = utils.decode_base64_string(system_prompt_b64)
+        user_prompt = utils.decode_base64_string(user_prompt_b64)
+
+        if not system_prompt or not user_prompt:
+            return {"success": False, "error": "Invalid Base64 prompts provided. Could not decode."}
+
+        clean_b64 = utils.extract_base64_content(base64_file)
+        if not clean_b64:
+            return {"success": False, "error": "Invalid base64 provided"}
+
+        try:
+            base64_images = utils.extract_image(clean_b64)
+        except Exception as conv_err:
+            return {"success": False, "error": f"PDF Conversion failed: {str(conv_err)}"}
+
+        if not base64_images:
+            return {"success": False, "error": "Could not extract images from PDF"}
+
+        vision_content: List[Dict[str, Any]] = [
+            {"type": "text", "text": user_prompt}
+        ]
+
+        for img_b64 in base64_images:
+            vision_content.append({
+                "type": "image_url",
+                "image_url": {
+                    "url": f"data:image/jpeg;base64,{img_b64}",
+                    "detail": "high"
+                }
+            })
+
+        payload = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": vision_content}
+            ],
+            "max_tokens": 4096,
+            "temperature": 0,
+            "response_format": {"type": "json_object"}
+        }
+
+        headers = {
+            "Content-Type": "application/json",
+            "Authorization": f"Bearer {api_key}"
+        }
+
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=120
+        )
+
+        if response.status_code != 200:
+            return {"success": False, "error": f"OpenAI Error {response.status_code}: {response.text}"}
+
+        result = response.json()
+
+        if 'choices' not in result or not result['choices']:
+            return {"success": False, "error": "No choices returned from OpenAI"}
+
+        ai_response = result['choices'][0]['message']['content'].strip()
+
+        try:
+            extracted_data = json.loads(ai_response)
+            cleaned_data = utils.clean_json_newlines(extracted_data)
+            return {"success": True, "extracted_data": cleaned_data}
+        except json.JSONDecodeError:
+            if "```json" in ai_response:
+                ai_response = ai_response.split("```json")[1].split("```")[0].strip()
+            elif "```" in ai_response:
+                ai_response = ai_response.split("```")[1].split("```")[0].strip()
+
+            try:
+                extracted_data = json.loads(ai_response)
+                return {"success": True, "extracted_data": extracted_data}
+            except json.JSONDecodeError as json_err:
+                return {"success": False, "error": f"JSON Parse Error: {json_err}", "raw": ai_response}
+
+    except Exception as e:
+        logger.error(f"Generic Doc Error: {e}")
         return {"success": False, "error": str(e)}

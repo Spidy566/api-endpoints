@@ -12,9 +12,9 @@ VC_SCAN_USER_TEMPLATE = """
 Extract structured contact information from the OCR text below.
 
 Rules:
-1️⃣ Always detect multiple companies, phone numbers, and addresses if they exist.
-2️⃣ Each key must contain an array of strings, even if one value.
-3️⃣ Required keys:
+1 Always detect multiple companies, phone numbers, and addresses if they exist.
+2 Each key must contain an array of strings, even if one value.
+3 Required keys:
    - name
    - designation
    - company_name
@@ -25,8 +25,8 @@ Rules:
    - country
    - website
    - slogan
-4️⃣ Merge multi-line addresses but keep different locations separate.
-5️⃣ Fix OCR mistakes (e.g. '@ ' → '@', 'dot' → '.').
+4 Merge multi-line addresses but keep different locations separate.
+5 Fix OCR mistakes (e.g. '@ ' → '@', 'dot' → '.').
 
 Example:
 {{

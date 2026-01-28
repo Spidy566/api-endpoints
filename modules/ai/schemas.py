@@ -62,3 +62,15 @@ class AIBillOfLadingResponse(BaseModel):
     success: bool = Field(..., title="", description="Indicates whether the Bill of Lading extraction was successful.")
     extracted_bl: Dict[str, Any]  = Field(..., title="", description="The structured JSON object containing extracted fields (Shipper, Consignee, Containers, etc.).")
     error: Optional[str] = Field(default=None, title="", description="Detailed error message if the extraction failed, otherwise null.")
+
+class AIExtractDocumentRequest(BaseModel):
+    base64_file: str = Field(..., description="Base64 encoded string of the file (PDF, JPG, PNG).")
+    openai_api_key: str = Field(..., description="Your OpenAI API Key.")
+    model: str = Field(default="gpt-4o", description="The OpenAI model to use.")
+    system_prompt_b64: str = Field(..., description="The system instruction in base64.")
+    user_prompt_b64: str = Field(..., description="The user instruction in base64.")
+
+class AIExtractDocumentResponse(BaseModel):
+    success: bool = Field(..., title="", description="Indicates whether the document extraction was successful.")
+    extracted_data: Dict[str, Any] = Field(..., description="The structured JSON extracted based on your prompts.")
+    error: Optional[str] = Field(default=None, title="", description="Detailed error message if the extraction failed, otherwise null.")
