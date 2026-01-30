@@ -1,54 +1,46 @@
-VC_SCAN_SYSTEM_MESSAGE = {
-        "role": "system",
-        "content": (
-            "You are an AI data extractor. "
-            "Your only task is to output valid JSON. "
-            "Do not include explanations, text, or markdown. "
-            "Output must be a single JSON object following exactly the required keys."
-        ),
-    }
+VC_SCAN_SYSTEM_PROMPT = {
+    "role": "system",
+    "content": (
+        "You are an expert data extraction AI. Your task is to analyze an image of a business card "
+        "and return a single, valid JSON object. Do not include explanations, markdown, or any text outside the JSON object."
+    ),
+}
 
-VC_SCAN_USER_TEMPLATE = """
-Extract structured contact information from the OCR text below.
+VC_SCAN_USER_PROMPT = """
+Analyze the business card image and perform two tasks:
+1.  Transcribe all visible text into a single string.
+2.  Parse the transcribed information into a structured object.
 
-Rules:
-1 Always detect multiple companies, phone numbers, and addresses if they exist.
-2 Each key must contain an array of strings, even if one value.
-3 Required keys:
-   - name
-   - designation
-   - company_name
-   - emails
-   - phone_numbers
-   - address
-   - city
-   - country
-   - website
-   - slogan
-4 Merge multi-line addresses but keep different locations separate.
-5 Fix OCR mistakes (e.g. '@ ' → '@', 'dot' → '.').
+Return a single JSON object with the following top-level keys: "raw_text" and "parsed_data".
 
-Example:
-{{
-  "name": ["John Smith"],
-  "designation": ["Sales Director"],
-  "company_name": ["ABC Logistics", "XYZ Shipping"],
-  "emails": ["john@abclogistics.com"],
-  "phone_numbers": ["+1 212-555-7890", "+971 50 123 4567"],
-  "address": ["123 Main St, New York, USA", "Dubai Marina, UAE"],
-  "city": ["New York", "Dubai"],
-  "country": ["USA", "UAE"],
-  "website": ["www.abclogistics.com"],
-  "slogan": ["We move the world"]
-}}
+**CRITICAL RULES for `parsed_data`:**
+1.  **Accuracy is Key:** Transcribe names, companies, and other details exactly. DO NOT invent characters or words. For example, if an email is 'info@redseaindia.com', do not write 'info@redseaiindia.com'.
+2.  **Infer Missing Data:** Use context to fill in missing fields.
+    - If the phone number starts with `+91`, you MUST set the country to "India".
+    - If an address mentions a city like "Dubai", you MUST set the country to "UAE".
+3.  **Merge Addresses:** If a single physical address spans multiple lines, merge them into ONE string in the `address` array. Keep distinct office addresses separate.
+4.  **Format Correctly:** Every value must be an array of strings (e.g., "name": ["John Doe"]). If a field like 'slogan' or 'website' is not present, return an empty array `[]`.
+5.  **Find Everything:** Scan the entire card for a slogan, motto, or tagline for the `slogan` field. Find any web addresses for the `website` field.
 
-Now extract from:
+**Required Keys in `parsed_data`:**
+name, designation, company_name, emails, phone_numbers, address, city, country, website, slogan.
 
-Raw OCR:
-\"\"\"{raw_text}\"\"\"
-
-Cleaned OCR:
-\"\"\"{cleaned_text}\"\"\"
+Example Output Format:
+{
+  "raw_text": "John Smith Sales Director ABC Logistics ... +1 212-555-7890 ...",
+  "parsed_data": {
+    "name": ["John Smith"],
+    "designation": ["Sales Director"],
+    "company_name": ["ABC Logistics"],
+    "emails": ["john@abclogistics.com"],
+    "phone_numbers": ["+1 212-555-7890"],
+    "address": ["123 Main St, New York, USA"],
+    "city": ["New York"],
+    "country": ["USA"],
+    "website": ["www.abclogistics.com"],
+    "slogan": ["Quality You Can Trust"]
+  }
+}
 """
 
 BL_EXTRACTION_SYSTEM = """

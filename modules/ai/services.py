@@ -1,7 +1,7 @@
 import requests
 import json
 import base64
-from typing import Dict, Any, Union, List
+from typing import Dict, Any, List
 from core.config import logger
 from modules.ai import utils, prompts
 
@@ -129,63 +129,67 @@ def process_with_openai(api_key: str, model: str, prompt_header: str, prompt_det
     except Exception as gen_err:
         return {"success": False, "error": f"Processing error: {str(gen_err)}"}
 
-def extract_card_json_with_openai(api_key: str, model: str, raw_text: str, cleaned_text: str, timeout: int = 120) -> Union[Dict[str, Any], Dict[str, str]]:
-    """Extract structured JSON from OCR text using OpenAI"""
-    headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
 
-    user_prompt = prompts.VC_SCAN_USER_TEMPLATE.format(
-        raw_text=raw_text,
-        cleaned_text=cleaned_text
-    )
-
-    payload: Dict[str, Any] = {
-        "model": model,
-        "messages": [
-            prompts.VC_SCAN_SYSTEM_MESSAGE,
-            {"role": "user", "content": user_prompt}
-        ],
-    }
-
-    if model.startswith("gpt-5"):
-        payload["max_completion_tokens"] = 800
-    else:
-        payload["max_tokens"] = 800
-        payload["temperature"] = 0.1
-        payload["top_p"] = 0.9
-
-    def call_openai() -> Dict[str, str]:
-        try:
-            resp = requests.post("https://api.openai.com/v1/chat/completions",
-                                 headers=headers, json=payload, timeout=timeout)
-            if resp.status_code != 200:
-                return {"error": f"OpenAI API error {resp.status_code}: {resp.text[:300]}"}
-            data = resp.json()
-            content = data.get("choices", [{}])[0].get("message", {}).get("content", "")
-            return {"text": content.strip()}
-        except Exception as req_err:
-            return {"error": str(req_err)}
-
-    result = call_openai()
-    text = result.get("text", "").strip()
-
-    if not text:
-        result = call_openai()
-        text = result.get("text", "").strip()
-
-    if not text:
-        return {"error": "Empty response from model", "raw": ""}
-
-    for fence in ["```json", "```"]:
-        if text.startswith(fence):
-            text = text[len(fence):]
-    if text.endswith("```"):
-        text = text[:-3]
-    text = text.strip()
-
+def scan_vc_with_vision(api_key: str, base64_file: str, model: str) -> Dict[str, Any]:
+    """Extracts both raw text and parsed data from a VC using OpenAI Vision."""
     try:
-        return json.loads(text)
-    except Exception as parse_err:
-        return {"error": f"Failed to parse JSON: {parse_err}", "raw": text[:1000]}
+        clean_b64 = utils.extract_base64_content(base64_file)
+        if not clean_b64:
+            return {"success": False, "error": "Invalid base64 provided"}
+
+        try:
+            base64_images = utils.extract_image(clean_b64)
+        except Exception as conv_err:
+            return {"success": False, "error": f"Image/PDF Conversion failed: {str(conv_err)}"}
+
+        if not base64_images:
+            return {"success": False, "error": "Could not extract images from input"}
+
+        vision_content: List[Dict[str, Any]] = [
+            {"type": "text", "text": prompts.VC_SCAN_USER_PROMPT}
+        ]
+
+        for img_b64 in base64_images:
+            vision_content.append({
+                "type": "image_url",
+                "image_url": {"url": f"data:image/jpeg;base64,{img_b64}", "detail": "high"}
+            })
+
+        payload = {
+            "model": model,
+            "response_format": {"type": "json_object"},
+            "messages": [
+                prompts.VC_SCAN_SYSTEM_PROMPT,
+                {"role": "user", "content": vision_content}
+            ],
+            "max_tokens": 2048,
+            "temperature": 0.1
+        }
+        headers = {"Content-Type": "application/json", "Authorization": f"Bearer {api_key}"}
+
+        response = requests.post(
+            "https://api.openai.com/v1/chat/completions",
+            headers=headers, json=payload, timeout=120
+        )
+
+        if response.status_code != 200:
+            return {"success": False, "error": f"OpenAI Error {response.status_code}: {response.text}"}
+
+        result = response.json()
+        ai_response_content = result.get('choices', [{}])[0].get('message', {}).get('content', '{}')
+
+        try:
+            data = json.loads(ai_response_content)
+            if "raw_text" in data and "parsed_data" in data:
+                return {"success": True, "data": data}
+            else:
+                return {"success": False, "error": "AI response missing required keys.", "raw": ai_response_content}
+        except json.JSONDecodeError as json_err:
+            return {"success": False, "error": f"JSON Parse Error: {json_err}", "raw": ai_response_content}
+
+    except Exception as e:
+        logger.error(f"VC Vision Extraction Error: {e}")
+        return {"success": False, "error": str(e)}
 
 
 def extract_bl_data(api_key: str, base64_file: str, model: str) -> Dict[str, Any]:

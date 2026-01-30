@@ -1,4 +1,4 @@
-import os
+import base64
 import asyncio
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from typing import Optional
@@ -76,71 +76,55 @@ async def openai_extract(request: schemas.AIGenericExtractRequest):
 
 @router.post(
     "/scan_vc",
-    summary="Scan Visiting Card",
-    description="Upload image/PDF, performs OCR, then AI extraction and returns structured JSON.",
+    summary="Scan Visiting Card (Vision)",
+    description="Uploads image/PDF, uses OpenAI Vision to transcribe and parse data.",
     response_model=schemas.AIVisitingCardResponse
 )
 async def scan_visiting_card(
-    file: UploadFile = File(..., title="", description="The visiting card file. Supports JPG, PNG, and PDF."),
-    api_key: Optional[str] = Form(None, title="", description="The OpenAI API Key.",),
-    model: Optional[str] = Form(None, title="", description="The OpenAI model ID to use for extraction.", examples=['gpt-4o', 'gpt-4o-mini']),
+        file: UploadFile = File(..., description="The visiting card file (JPG/PNG/PDF)."),
+        api_key: Optional[str] = Form(None, description="OpenAI API Key."),
+        model: Optional[str] = Form("gpt-4o", description="Model ID (e.g., gpt-4o, gpt-4o-mini)."),
 ):
-    """Scans a visiting card (JPG/PNG/PDF), performs OCR, and returns structured JSON."""
-    temp_path = None
     try:
         file_bytes = await file.read()
         if len(file_bytes) < 10:
             raise HTTPException(status_code=400, detail="File is empty or too small.")
 
-        try:
-            temp_path = utils.to_temp_image(
-                file_bytes,
-                file.content_type or "",
-                file.filename or "upload"
-            )
-        except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid image format: {str(e)}")
+        base64_file = base64.b64encode(file_bytes).decode('utf-8')
 
-        raw_text = utils.ocr_extract_card(temp_path)
-        clean_text = utils.clean_card_text(raw_text)
-
-        if len(clean_text) < 5:
-            raise HTTPException(status_code=422, detail="OCR failed to detect readable text.")
-
-        key = api_key or os.getenv("OPENAI_API_KEY")
-        if not key:
+        if not api_key:
             raise HTTPException(status_code=401, detail="Missing OpenAI API Key.")
 
-        result = services.extract_card_json_with_openai(key, model, raw_text, clean_text)
+        result = services.scan_vc_with_vision(api_key, base64_file, model)
 
-        if isinstance(result, dict) and "error" in result:
-            error_msg = str(result["error"]).lower()
-            if "invalid api key" in error_msg or "authentication" in error_msg:
-                raise HTTPException(status_code=401, detail=f"OpenAI Auth Error: {result['error']}")
-            elif "model" in error_msg and "not found" in error_msg:
-                raise HTTPException(status_code=404, detail=f"OpenAI Model Error: {result['error']}")
-            elif "rate limit" in error_msg:
+        if not result.get("success"):
+            err_msg = str(result.get("error", "")).lower()
+            if "authentication" in err_msg or "401" in err_msg:
+                raise HTTPException(status_code=401, detail=result.get("error"))
+            elif "rate limit" in err_msg:
                 raise HTTPException(status_code=429, detail="OpenAI Rate Limit Exceeded.")
             else:
-                raise HTTPException(status_code=502, detail=f"OpenAI Processing Failed: {result['error']}")
+                raise HTTPException(status_code=500, detail=result.get("error"))
+
+        ai_data = result.get("data", {})
+        raw_text = ai_data.get("raw_text", "")
+        parsed_data = ai_data.get("parsed_data", {})
+
+        cleaned_text = utils.clean_card_text(raw_text)
 
         return {
             "success": True,
             "raw_text": raw_text,
-            "cleaned_text": clean_text,
-            "parsed_data": result,
-            "error": None,
+            "cleaned_text": cleaned_text,
+            "parsed_data": parsed_data,
             "model_used": model,
+            "error": None,
         }
 
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"VC Scan Error: {e}")
         raise HTTPException(status_code=500, detail=f"Internal Processing Error: {str(e)}")
-    finally:
-        if temp_path and os.path.exists(temp_path):
-            os.remove(temp_path)
 
 
 @router.post(

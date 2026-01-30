@@ -7,7 +7,6 @@ requires-python = ">=3.11"
 dependencies = [
     "boto3>=1.42.4",
     "docxtpl>=0.20.2",
-    "easyocr>=1.7.2",
     "extract-msg>=0.55.0",
     "fastapi[standard]>=0.124.0",
     "openai>=2.12.0",
@@ -15,7 +14,6 @@ dependencies = [
     "pyhanko>=0.32.0",
     "pymupdf>=1.26.6",
     "pypdf>=6.4.1",
-    "pytesseract>=0.3.13",
     "requests>=2.32.5",
     "unoconv>=0.9.0",
 ]
