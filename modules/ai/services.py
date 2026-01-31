@@ -1,6 +1,16 @@
 import requests
 import json
 import base64
+from openai import OpenAI, APIError
+from openai.types.chat import (
+    ChatCompletionMessageParam,
+    ChatCompletionSystemMessageParam,
+    ChatCompletionUserMessageParam,
+    ChatCompletionContentPartParam,
+    ChatCompletionContentPartTextParam,
+    ChatCompletionContentPartImageParam
+)
+
 from typing import Dict, Any, List
 from core.config import logger
 from modules.ai import utils, prompts
@@ -290,51 +300,59 @@ def extract_document(api_key: str, base64_file: str, model: str, system_prompt_b
         if not base64_images:
             return {"success": False, "error": "Could not extract images from PDF"}
 
-        vision_content: List[Dict[str, Any]] = [
-            {"type": "text", "text": user_prompt}
+        vision_content: List[ChatCompletionContentPartParam] = [
+            ChatCompletionContentPartTextParam(type="text", text=user_prompt)
         ]
 
         for img_b64 in base64_images:
-            vision_content.append({
-                "type": "image_url",
-                "image_url": {
-                    "url": f"data:image/jpeg;base64,{img_b64}",
-                    "detail": "high"
-                }
-            })
+            if not img_b64:
+                continue
 
-        payload = {
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": vision_content}
-            ],
-            "max_tokens": 4096,
-            "temperature": 0,
-            "response_format": {"type": "json_object"}
-        }
+            if isinstance(img_b64, bytes):
+                img_b64 = img_b64.decode('utf-8')
 
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {api_key}"
-        }
+            img_b64 = img_b64.strip()
 
-        response = requests.post(
-            "https://api.openai.com/v1/chat/completions",
-            headers=headers,
-            json=payload,
-            timeout=120
+            if img_b64.startswith("data:"):
+                final_url = img_b64
+            else:
+                if img_b64.startswith("iVBOR"):
+                    mime_type = "image/png"
+                elif img_b64.startswith("/9j/"):
+                    mime_type = "image/jpeg"
+                elif img_b64.startswith("R0lGOD"):
+                    mime_type = "image/gif"
+                elif img_b64.startswith("UklGR"):
+                    mime_type = "image/webp"
+                else:
+                    mime_type = "image/jpeg"
+
+                final_url = f"data:{mime_type};base64,{img_b64}"
+
+
+            vision_content.append(
+                ChatCompletionContentPartImageParam(
+                    type="image_url",
+                    image_url={
+                        "url": final_url,
+                        "detail": "high"
+                    }
+                )
+            )
+
+        client = OpenAI(api_key=api_key)
+
+        messages: List[ChatCompletionMessageParam] = [
+            ChatCompletionSystemMessageParam(role="system", content=system_prompt),
+            ChatCompletionUserMessageParam(role="user", content=vision_content)
+        ]
+
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
         )
 
-        if response.status_code != 200:
-            return {"success": False, "error": f"OpenAI Error {response.status_code}: {response.text}"}
-
-        result = response.json()
-
-        if 'choices' not in result or not result['choices']:
-            return {"success": False, "error": "No choices returned from OpenAI"}
-
-        ai_response = result['choices'][0]['message']['content'].strip()
+        ai_response = response.choices[0].message.content.strip()
 
         try:
             extracted_data = json.loads(ai_response)
@@ -352,6 +370,9 @@ def extract_document(api_key: str, base64_file: str, model: str, system_prompt_b
             except json.JSONDecodeError as json_err:
                 return {"success": False, "error": f"JSON Parse Error: {json_err}", "raw": ai_response}
 
+    except APIError as api_err:
+        logger.error(f"OpenAI API Error: {api_err}")
+        return {"success": False, "error": f"OpenAI API Error: {str(api_err)}"}
     except Exception as e:
         logger.error(f"Generic Doc Error: {e}")
         return {"success": False, "error": str(e)}
