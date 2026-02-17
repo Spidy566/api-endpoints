@@ -1,3 +1,12 @@
+"""
+---------------------------------------------------------------------------
+Commit History
+---------------------------------------------------------------------------
+Description                              | Date       | Developer
+---------------------------------------------------------------------------
+Initial setup and route registration     | 07-01-2026 | vishal
+---------------------------------------------------------------------------
+"""
 import subprocess
 import uvicorn
 from contextlib import asynccontextmanager
@@ -20,6 +29,7 @@ from modules.documents import routes as documents_routes
 from modules.email import routes as email_routes
 from modules.logs import routes as logs_routes
 from modules.signature import routes as signature_routes
+from modules.sftp import routes as sftp_routes
 from modules.logs.services import request_counts
 
 
@@ -46,6 +56,7 @@ TAGS_METADATA = [
     {"name": "AI", "description": "OpenAI, OCR, and Extraction services."},
     {"name": "AWS", "description": "S3 Storage and Textract analysis."},
     {"name": "Signature", "description": "Digital PFX Signatures."},
+    {"name": "SFTP", "description": "Remote file transfer services."},
     {"name": "Documents", "description": "PDF Merging and DOCX Generation."},
     {"name": "Email", "description": "Email parsing and sending."},
     {"name": "Backup", "description": "File backup utilities."},
@@ -75,6 +86,7 @@ app.include_router(documents_routes.router, tags=["Documents"])
 app.include_router(email_routes.router, tags=["Email"])
 app.include_router(logs_routes.router, tags=["Logs"])
 app.include_router(signature_routes.router, tags=["Signature"])
+app.include_router(sftp_routes.router, tags=["SFTP"])
 
 
 @app.get("/", include_in_schema=False)

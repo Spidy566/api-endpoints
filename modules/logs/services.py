@@ -1,3 +1,12 @@
+"""
+---------------------------------------------------------------------------
+Commit History
+---------------------------------------------------------------------------
+Description                              | Date       | Developer
+---------------------------------------------------------------------------
+Log tracking and file serving            | 13-06-2025 | senthil
+---------------------------------------------------------------------------
+"""
 from collections import defaultdict
 from pathlib import Path
 from fastapi import HTTPException, Request

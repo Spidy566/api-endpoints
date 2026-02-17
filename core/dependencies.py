@@ -1,3 +1,12 @@
+"""
+---------------------------------------------------------------------------
+Commit History
+---------------------------------------------------------------------------
+Description                              | Date       | Developer
+---------------------------------------------------------------------------
+AWS Boto3 clients and executors          | 07-01-2026 | vishal
+---------------------------------------------------------------------------
+"""
 import boto3
 from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from core.config import AWS_KEY, AWS_SECRET, REGION, logger

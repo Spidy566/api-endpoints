@@ -1,3 +1,13 @@
+"""
+---------------------------------------------------------------------------
+Commit History
+---------------------------------------------------------------------------
+Description                              | Date       | Developer
+---------------------------------------------------------------------------
+Models for SMTP Email config             | 03-12-2025 | vishal
+Models for email extraction results      | 13-06-2025 | senthil
+---------------------------------------------------------------------------
+"""
 from typing import List, Optional, Literal, Dict
 from pydantic import BaseModel, EmailStr, SecretStr, ConfigDict, Field
 from pydantic.alias_generators import to_pascal

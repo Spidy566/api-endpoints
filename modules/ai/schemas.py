@@ -1,3 +1,14 @@
+"""
+---------------------------------------------------------------------------
+Commit History
+---------------------------------------------------------------------------
+Description                              | Date       | Developer
+---------------------------------------------------------------------------
+Models for Bill of Lading & Doc extract  | 07-01-2026 | vishal
+Models for Visiting Card response        | 02-10-2025 | dhremagi
+Models for OpenAI generic extraction     | 13-06-2025 | senthil
+---------------------------------------------------------------------------
+"""
 from pydantic import BaseModel, field_validator, Field, ConfigDict
 from typing import Union, Dict, Any, List, Optional
 

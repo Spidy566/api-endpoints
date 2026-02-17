@@ -1,3 +1,13 @@
+"""
+---------------------------------------------------------------------------
+Commit History
+---------------------------------------------------------------------------
+Description                              | Date       | Developer
+---------------------------------------------------------------------------
+PyHanko PFX digital signing logic        | 13-06-2025 | senthil
+Added PDF signature validation service   | 13-06-2025 | senthil
+---------------------------------------------------------------------------
+"""
 import logging
 import asyncio
 from io import BytesIO

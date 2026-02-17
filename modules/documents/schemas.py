@@ -1,3 +1,13 @@
+"""
+---------------------------------------------------------------------------
+Commit History
+---------------------------------------------------------------------------
+Description                              | Date       | Developer
+---------------------------------------------------------------------------
+Models for report records and images     | 03-12-2025 | vishal
+Models for PDF merging items             | 03-12-2025 | dhremagi
+---------------------------------------------------------------------------
+"""
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional
 

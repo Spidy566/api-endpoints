@@ -1,3 +1,13 @@
+"""
+---------------------------------------------------------------------------
+Commit History
+---------------------------------------------------------------------------
+Description                              | Date       | Developer
+---------------------------------------------------------------------------
+Added Textract and S3 Upload endpoints   | 19-06-2025 | senthil
+---------------------------------------------------------------------------
+"""
+
 import base64
 from datetime import datetime
 from fastapi import APIRouter, HTTPException, Request, UploadFile, File, Path

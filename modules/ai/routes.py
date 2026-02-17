@@ -1,3 +1,16 @@
+"""
+---------------------------------------------------------------------------
+Commit History
+---------------------------------------------------------------------------
+Description                              | Date       | Developer
+---------------------------------------------------------------------------
+Added /extract_document                  | 03-02-2026 | vishal
+Added /extract_bl                        | 07-01-2026 | vishal
+Added /scan_vc                           | 02-10-2025 | dhremagi
+Added /openai_extract                    | 13-06-2025 | senthil
+---------------------------------------------------------------------------
+"""
+
 import base64
 import asyncio
 from fastapi import APIRouter, HTTPException, UploadFile, File, Form

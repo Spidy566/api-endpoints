@@ -1,3 +1,13 @@
+"""
+---------------------------------------------------------------------------
+Commit History
+---------------------------------------------------------------------------
+Description                              | Date       | Developer
+---------------------------------------------------------------------------
+Added log file retrieval endpoints       | 13-06-2025 | senthil
+---------------------------------------------------------------------------
+"""
+
 from fastapi import APIRouter, Request, Path as PathParam
 from modules.logs import schemas, services
 

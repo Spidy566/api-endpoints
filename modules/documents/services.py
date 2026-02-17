@@ -1,3 +1,14 @@
+"""
+---------------------------------------------------------------------------
+Commit History
+---------------------------------------------------------------------------
+Description                              | Date       | Developer
+---------------------------------------------------------------------------
+DOCX template rendering with images      | 07-01-2026 | vishal
+Unoconv DOCX to PDF conversion logic     | 03-12-2025 | vishal
+PyPDF based file merging logic           | 03-12-2025 | dhremagi
+---------------------------------------------------------------------------
+"""
 import io
 import os
 import uuid

@@ -1,3 +1,15 @@
+"""
+---------------------------------------------------------------------------
+Commit History
+---------------------------------------------------------------------------
+Description                              | Date       | Developer
+---------------------------------------------------------------------------
+Initial OpenAI Vision processing logic   | 13-06-2025 | senthil
+Added Business Card (VC) scanning logic  | 02-10-2025 | dhremagi
+Added Bill of Lading extraction logic    | 07-01-2026 | vishal
+Implemented dynamic document extraction  | 03-02-2026 | vishal
+---------------------------------------------------------------------------
+"""
 import requests
 import json
 import base64
