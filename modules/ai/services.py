@@ -362,6 +362,7 @@ def extract_document(api_key: str, base64_file: str, model: str, system_prompt_b
         response = client.chat.completions.create(
             model=model,
             messages=messages,
+            timeout=180
         )
 
         ai_response = response.choices[0].message.content.strip()
