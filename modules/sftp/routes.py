@@ -24,7 +24,7 @@ async def sftp_upload(payload: schemas.SftpUploadRequest):
 @router.post(
     "/sftp_download",
     summary="SFTP Download Folder",
-    description="Downloads all files from a specific SFTP directory as Base64. Optionally deletes them after download.",
+    description="Deletes specific files provided in the list, and downloads the remaining files from the remote directory as Base64.",
     response_model=schemas.SftpDownloadResponse
 )
 async def sftp_download(payload: schemas.SftpDownloadRequest):

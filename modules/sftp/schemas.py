@@ -20,8 +20,8 @@ class SftpUploadRequest(BaseModel):
     content: str = Field(..., description="Base64 encoded content of the file.")
 
 class SftpUploadResponse(BaseModel):
-    status: str = Field(..., description="The status of the upload operation (e.g., success, error).", example="success")
-    message: str = Field(..., description="A human-readable message describing the result.", example="File uploaded")
+    status: str = Field(..., description="The status of the upload operation (e.g., success, error).")
+    message: str = Field(..., description="A human-readable message describing the result.")
     size_bytes: int = Field(..., description="Size of the uploaded file in bytes.")
 
 class SftpDownloadRequest(BaseModel):
@@ -30,7 +30,11 @@ class SftpDownloadRequest(BaseModel):
     username: str = Field(..., description="SFTP username.")
     password: str = Field(..., description="SFTP password.")
     remote_dir: str = Field(..., description="The remote directory path to download files from.")
-    delete_after_download: bool = Field(default=False, description="If true, deletes files from the server after successful download.")
+    filenames: List[str] = Field(default=[], description="List of exact filenames to delete instead of downloading.")
+
+class SftpDeletedItem(BaseModel):
+    filename: str = Field(..., description="The name of the file targeted for deletion.")
+    status: str = Field(..., description="Status of deletion (e.g., deleted, not found, error).")
 
 class SftpFileItem(BaseModel):
     filename: str = Field(..., description="The name of the file retrieved from the server.")
@@ -42,5 +46,6 @@ class SftpFileItem(BaseModel):
 class SftpDownloadResponse(BaseModel):
     status: str = Field(..., description="Overall status of the bulk download operation.")
     remote_dir: str = Field(..., description="The remote directory path where the download was initiated.")
+    deleted_summary: List[SftpDeletedItem] = Field(..., description="Summary of deleted files.")
     downloaded_count: int = Field(..., description="Total number of files successfully downloaded.")
     files: List[SftpFileItem] = Field(..., description="A list containing the details and content of each file processed.")
