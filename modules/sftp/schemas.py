@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Added separate delete models             | 18-03-2026 | vishal
 Models for SFTP auth and file transfers  | 17-02-2026 | vishal
 ---------------------------------------------------------------------------
 """
@@ -30,11 +31,6 @@ class SftpDownloadRequest(BaseModel):
     username: str = Field(..., description="SFTP username.")
     password: str = Field(..., description="SFTP password.")
     remote_dir: str = Field(..., description="The remote directory path to download files from.")
-    filenames: List[str] = Field(default=[], description="List of exact filenames to delete instead of downloading.")
-
-class SftpDeletedItem(BaseModel):
-    filename: str = Field(..., description="The name of the file targeted for deletion.")
-    status: str = Field(..., description="Status of deletion (e.g., deleted, not found, error).")
 
 class SftpFileItem(BaseModel):
     filename: str = Field(..., description="The name of the file retrieved from the server.")
@@ -46,6 +42,17 @@ class SftpFileItem(BaseModel):
 class SftpDownloadResponse(BaseModel):
     status: str = Field(..., description="Overall status of the bulk download operation.")
     remote_dir: str = Field(..., description="The remote directory path where the download was initiated.")
-    deleted_summary: List[SftpDeletedItem] = Field(..., description="Summary of deleted files.")
     downloaded_count: int = Field(..., description="Total number of files successfully downloaded.")
     files: List[SftpFileItem] = Field(..., description="A list containing the details and content of each file processed.")
+
+class SftpDeleteRequest(BaseModel):
+    host: str = Field(..., description="SFTP server hostname or IP.")
+    port: int = Field(..., description="SFTP port.")
+    username: str = Field(..., description="SFTP username.")
+    password: str = Field(..., description="SFTP password.")
+    remote_dir: str = Field(..., description="The remote directory path where the file exists.")
+    filename: str = Field(..., description="The exact filename of the file to delete.")
+
+class SftpDeleteResponse(BaseModel):
+    status: str = Field(..., description="The status of the delete operation (e.g., success, error).")
+    message: str = Field(..., description="A human-readable message describing the result.")

@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Refactored to separate delete / download | 18-03-2026 | vishal
 Added list-based targeted deletion logic | 27-02-2026 | vishal
 Implemented Paramiko SFTP client logic   | 17-02-2026 | vishal
 Implemented folder download and delete   | 17-02-2026 | vishal
@@ -91,55 +92,41 @@ def download_folder_from_sftp(payload: schemas.SftpDownloadRequest) -> Dict[str,
             raise HTTPException(status_code=500, detail=f"SFTP Connection Error: {str(e)}")
 
         remote_dir = payload.remote_dir.rstrip("/")
+        if not remote_dir:
+            remote_dir = "."
+
         try:
-            sftp.chdir(remote_dir)
-        except Exception:
+            entries = sftp.listdir_attr(remote_dir)
+        except IOError:
             raise HTTPException(status_code=404, detail=f"Remote directory not found: {payload.remote_dir}")
 
-        entries = sftp.listdir_attr(remote_dir)
-
-        files_to_delete = set(payload.filenames)
         files_out = []
-        deleted_out = []
 
         for ent in entries:
             name = ent.filename
-            remote_path = f"{remote_dir}/{name}"
+            remote_path = f"{remote_dir}/{name}" if remote_dir != "." else name
 
             if stat.S_ISDIR(ent.st_mode):
                 continue
 
-            if name in files_to_delete:
-                try:
-                    sftp.remove(remote_path)
-                    deleted_out.append({"filename": name, "status": "deleted"})
-                except Exception as e:
-                    logger.error(f"Failed to delete {name} from SFTP: {e}")
-                    deleted_out.append({"filename": name, "status": "error"})
-                files_to_delete.remove(name)
-            else:
-                file_obj = io.BytesIO()
-                try:
-                    sftp.getfo(remote_path, file_obj)
-                    file_bytes = file_obj.getvalue()
-                    encoded = base64.b64encode(file_bytes).decode("utf-8")
+            file_obj = io.BytesIO()
+            try:
+                sftp.getfo(remote_path, file_obj)
+                file_bytes = file_obj.getvalue()
+                encoded = base64.b64encode(file_bytes).decode("utf-8")
 
-                    files_out.append({
-                        "filename": name,
-                        "status": "success",
-                        "size_bytes": len(file_bytes),
-                        "content_base64": encoded,
-                    })
-                except Exception as e:
-                    files_out.append({"filename": name, "status": "error", "error": str(e)})
-
-        for missing_file in files_to_delete:
-            deleted_out.append({"filename": missing_file, "status": "not found"})
+                files_out.append({
+                    "filename": name,
+                    "status": "success",
+                    "size_bytes": len(file_bytes),
+                    "content_base64": encoded,
+                })
+            except Exception as e:
+                files_out.append({"filename": name, "status": "error", "error": str(e)})
 
         return {
             "status": "success",
             "remote_dir": remote_dir,
-            "deleted_summary": deleted_out,
             "downloaded_count": len([f for f in files_out if f.get("status") == "success"]),
             "files": files_out
         }
@@ -149,6 +136,54 @@ def download_folder_from_sftp(payload: schemas.SftpDownloadRequest) -> Dict[str,
     except Exception as e:
         logger.error(f"SFTP Download Failure: {e}")
         raise HTTPException(status_code=500, detail=f"SFTP Error: {str(e)}")
+    finally:
+        if sftp: sftp.close()
+        if ssh: ssh.close()
+
+
+def delete_file_from_sftp(payload: schemas.SftpDeleteRequest) -> Dict[str, Any]:
+    ssh = paramiko.SSHClient()
+    ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    sftp = None
+
+    try:
+        try:
+            ssh.connect(
+                hostname=payload.host,
+                port=payload.port,
+                username=payload.username,
+                password=payload.password,
+                timeout=60
+            )
+            sftp = ssh.open_sftp()
+        except paramiko.AuthenticationException:
+            raise HTTPException(status_code=401, detail="SFTP Authentication Failed.")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"SFTP Connection Error: {str(e)}")
+
+        remote_dir = payload.remote_dir.rstrip("/")
+        if not remote_dir:
+            remote_dir = "."
+
+        remote_path = f"{remote_dir}/{payload.filename}" if remote_dir != "." else payload.filename
+
+        try:
+            sftp.remove(remote_path)
+        except IOError as e:
+            raise HTTPException(status_code=404, detail=f"File '{payload.filename}' not found or could not be deleted. Details: {str(e)}")
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Unexpected error deleting file: {str(e)}")
+
+        return {
+            "status": "success",
+            "message": f"File '{payload.filename}' was successfully deleted from '{remote_dir}'."
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"SFTP Delete Failure: {e}")
+        raise HTTPException(status_code=500, detail=f"SFTP Delete Error: {str(e)}")
     finally:
         if sftp: sftp.close()
         if ssh: ssh.close()
