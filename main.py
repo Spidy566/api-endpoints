@@ -28,6 +28,7 @@ from modules.backup import routes as backup_routes
 from modules.documents import routes as documents_routes
 from modules.email import routes as email_routes
 from modules.logs import routes as logs_routes
+from modules.proxy import routes as proxy_routes
 from modules.signature import routes as signature_routes
 from modules.sftp import routes as sftp_routes
 from modules.logs.services import request_counts
@@ -57,6 +58,7 @@ TAGS_METADATA = [
     {"name": "AWS", "description": "S3 Storage and Textract analysis."},
     {"name": "Signature", "description": "Digital PFX Signatures."},
     {"name": "SFTP", "description": "Remote file transfer services."},
+    {"name": "Proxy", "description": "Generic API Gateway / Forwarder"},
     {"name": "Documents", "description": "PDF Merging and DOCX Generation."},
     {"name": "Email", "description": "Email parsing and sending."},
     {"name": "Backup", "description": "File backup utilities."},
@@ -87,6 +89,7 @@ app.include_router(email_routes.router, tags=["Email"])
 app.include_router(logs_routes.router, tags=["Logs"])
 app.include_router(signature_routes.router, tags=["Signature"])
 app.include_router(sftp_routes.router, tags=["SFTP"])
+app.include_router(proxy_routes.router, tags=["Proxy"])
 
 
 @app.get("/", include_in_schema=False)
