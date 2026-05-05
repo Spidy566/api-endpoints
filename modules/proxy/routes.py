@@ -13,7 +13,7 @@ from modules.proxy import schemas, services
 router = APIRouter()
 
 @router.post(
-    "/forward",
+    "/fresa_proxy",
     summary="Generic API Proxy Forwarder",
     description="Send a target URL, method, credentials, and payload. This API will authenticate and forward it automatically."
 )

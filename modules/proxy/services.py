@@ -13,53 +13,22 @@ from core.config import logger
 from modules.proxy.schemas import GenericProxyRequest
 
 
-def handle_fasahpay_auth(auth_config) -> str:
-    """Dynamically fetches the JWT token for FasahPay using provided credentials."""
-    if not all([auth_config.auth_url, auth_config.client_id, auth_config.client_secret, auth_config.username,
-                auth_config.password]):
-        raise HTTPException(status_code=400,
-                            detail="Missing required auth fields for FasahPay (auth_url, client_id, client_secret, username, password)")
-
-    headers = {
-        "X-Tabadul-Client-Id": auth_config.client_id,
-        "X-Tabadul-Client-Secret": auth_config.client_secret,
-        "Content-Type": "application/json"
-    }
-    payload = {
-        "username": auth_config.username,
-        "password": auth_config.password
-    }
-
-    try:
-        response = requests.post(auth_config.auth_url, json=payload, headers=headers, timeout=30)
-        response.raise_for_status()
-        return response.json().get("token")
-    except requests.exceptions.RequestException as e:
-        logger.error(f"Generic Proxy - Failed to get token: {e}")
-        raise HTTPException(status_code=502,
-                            detail=f"Failed to authenticate with 3rd party: {response.text if response else str(e)}")
-
-
 def forward_generic_request(req: GenericProxyRequest) -> dict:
-    """Builds and forwards the request dynamically based on the payload."""
-
     headers = req.headers.copy() if req.headers else {}
     auth_tuple = None
-
     auth_type = req.auth.auth_type.lower()
 
     if auth_type == "basic":
+        if not req.auth.username or not req.auth.password:
+            raise HTTPException(status_code=400, detail="Username and password required for basic auth.")
         auth_tuple = (req.auth.username, req.auth.password)
 
     elif auth_type == "bearer":
+        if not req.auth.token:
+            raise HTTPException(status_code=400, detail="Token required for bearer auth.")
         headers["Authorization"] = f"Bearer {req.auth.token}"
 
-    elif auth_type == "fasahpay":
-        token = handle_fasahpay_auth(req.auth)
-        headers["Authorization"] = token
-        headers["X-Tabadul-Client-Id"] = req.auth.client_id
-        headers["X-Tabadul-Client-Secret"] = req.auth.client_secret
-
+    # Default JSON headers
     if req.payload and "Content-Type" not in headers:
         headers["Content-Type"] = "application/json"
     if "Accept" not in headers:
@@ -79,15 +48,21 @@ def forward_generic_request(req: GenericProxyRequest) -> dict:
         )
 
         try:
-            response_json = response.json()
+            target_response = response.json()
         except ValueError:
-            response_json = response.text
+            target_response = response.text
 
         return {
             "proxy_status_code": response.status_code,
-            "target_response": response_json
+            "target_response": target_response
         }
 
+    except requests.exceptions.Timeout:
+        logger.error(f"Proxy connection timed out to {req.target_url}")
+        raise HTTPException(status_code=504, detail="Proxy timed out waiting for the target server.")
+    except requests.exceptions.ConnectionError:
+        logger.error(f"Proxy connection error to {req.target_url}")
+        raise HTTPException(status_code=502, detail="Proxy failed to connect to the target server.")
     except requests.exceptions.RequestException as e:
-        logger.error(f"Generic Proxy connection error: {e}")
-        raise HTTPException(status_code=502, detail=f"Proxy failed to connect to target URL: {str(e)}")
+        logger.error(f"Proxy unexpected error: {e}")
+        raise HTTPException(status_code=500, detail=f"Unexpected proxy error: {str(e)}")
