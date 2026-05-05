@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Added IMAP inbox processing endpoints    | 05-05-2026 | dhremagi
 Added SMTP email sending                 | 03-12-2025 | vishal
 Added attachment extraction endpoints    | 13-06-2025 | senthil
 ---------------------------------------------------------------------------
@@ -176,3 +177,44 @@ async def send_email_endpoint(request: schemas.EmailSendRequest):
             detail=message
         )
 
+
+@router.post(
+    "/email_inbox_count",
+    summary="Get Inbox Email Count",
+    description="Connects via IMAP and returns the total number of emails in the INBOX.",
+    response_model=schemas.EmailInboxCountResponse,
+)
+async def email_inbox_count(payload: schemas.EmailInboxPayload):
+    try:
+        count = services.get_inbox_count_logic(payload)
+        return {"success": True, "email_count": count}
+
+    except ValueError as e:
+        logger.warning(f"IMAP Authentication Error: {str(e)}")
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        logger.error(f"IMAP Inbox Count Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post(
+    "/email_inbox_get_first_email",
+    summary="Get and Move First Email",
+    description="Fetches the first email from INBOX, converts to Base64, moves to a backup folder, and deletes it from INBOX.",
+    response_model=schemas.EmailInboxGetResponse,
+)
+async def email_inbox_get_first_email(payload: schemas.EmailInboxPayload):
+    try:
+        result = services.get_first_email_logic(payload)
+
+        return {
+            "success": True,
+            **result
+        }
+
+    except ValueError as e:
+        logger.warning(f"IMAP Authentication Error: {str(e)}")
+        raise HTTPException(status_code=401, detail=str(e))
+    except Exception as e:
+        logger.error(f"IMAP Get First Email Error: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))

@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Added IMAP inbox models and payloads     | 05-05-2026 | vishal
 Models for SMTP Email config             | 03-12-2025 | vishal
 Models for email extraction results      | 13-06-2025 | senthil
 ---------------------------------------------------------------------------
@@ -75,3 +76,26 @@ class EmailExtractionResponse(BaseModel):
     file_type_counts: Optional[Dict[str, int]] = Field(default=None, title="", description="Summary of attachment types found.")
     supported_formats: Optional[List[str]] = Field(default=None, title="", description="List of supported formats.")
     attachments: List[EmailExtractedAttachmentItem] = Field(..., title="", description="List of extracted attachment objects.")
+
+class EmailInboxPayload(BaseModel):
+    imap_server: str = Field(..., title="", description="IMAP server hostname.")
+    imap_port: int = Field(default=993, title="", description="IMAP server port (usually 993 for SSL).")
+    email_account: str = Field(..., title="", description="Email account username.")
+    password: str = Field(..., title="", description="Email account password.")
+    backup_folder: str = Field(default="INBOX.processed", title="", description="Folder to move processed emails to.")
+
+class EmailInboxCountResponse(BaseModel):
+    success: bool = Field(..., title="", description="Indicates if the operation succeeded.")
+    email_count: int = Field(..., title="", description="Number of emails found in the inbox.")
+
+class EmailInboxGetResponse(BaseModel):
+    success: bool = Field(..., title="", description="Indicates if the operation succeeded.")
+    email_found: bool = Field(..., title="", description="True if an email was available.")
+    message: Optional[str] = Field(default=None, title="", description="Informational message.")
+    subject: Optional[str] = Field(default=None, title="", description="Subject of the retrieved email.")
+    from_email: Optional[str] = Field(default=None, title="", description="Sender email address.")
+    to_email: Optional[str] = Field(default=None, title="", description="Recipient email address.")
+    date: Optional[str] = Field(default=None, title="", description="Date header of the email.")
+    email_msg_base64: Optional[str] = Field(default=None, title="", description="Base64 encoded raw email.")
+    attachment_count: int = Field(default=0, title="", description="Number of attachments inside the email.")
+    backup_folder: Optional[str] = Field(default=None, title="", description="Folder where the email was moved.")

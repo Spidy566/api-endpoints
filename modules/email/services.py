@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Added IMAP inbox connection and fetching | 05-05-2026 | dhremagi
 SMTP sending with AES password decrypt   | 03-12-2025 | vishal
 EML/MSG attachment extraction logic      | 13-06-2025 | senthil
 ---------------------------------------------------------------------------
@@ -16,6 +17,8 @@ import ssl
 import html
 import quopri
 import binascii
+import imaplib
+from email.header import decode_header
 from email import message_from_bytes, encoders
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
@@ -27,7 +30,7 @@ import extract_msg
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
 from core.config import logger, ALLOWED_EXTENSIONS, SHARED_SECRET_KEY
-from modules.email.schemas import EmailSmtpConfig, EmailSendMessage
+from modules.email.schemas import EmailSmtpConfig, EmailSendMessage, EmailInboxPayload
 
 def allowed_file(filename: str) -> bool:
     """Check if uploaded file has allowed extension"""
@@ -421,3 +424,135 @@ def send_email_logic(smtp_config: EmailSmtpConfig, email_message: EmailSendMessa
         return False, f"Network/Connection Error: {str(e)}"
     except Exception as e:
         return False, f"An unexpected error occurred: {str(e)}"
+
+
+def connect_imap(payload: EmailInboxPayload) -> imaplib.IMAP4_SSL:
+    """Connect to IMAP server."""
+    try:
+        mail = imaplib.IMAP4_SSL(payload.imap_server, payload.imap_port)
+        mail.login(payload.email_account, payload.password)
+        return mail
+    except imaplib.IMAP4.error as e:
+        raise ValueError(f"IMAP Authentication Failed: {str(e)}")
+    except Exception as e:
+        raise Exception(f"IMAP Connection Error: {str(e)}")
+
+def decode_mime_words(s: Optional[str]) -> str:
+    """Decode encoded email subject/header."""
+    if not s:
+        return ""
+
+    decoded_parts = decode_header(s)
+    decoded_string = ""
+
+    for part, encoding in decoded_parts:
+        if isinstance(part, bytes):
+            decoded_string += part.decode(encoding or "utf-8", errors="ignore")
+        else:
+            decoded_string += part
+
+    return decoded_string
+
+def get_attachment_count(parsed_email) -> int:
+    """Count attachments in email."""
+    count = 0
+    for part in parsed_email.walk():
+        content_disposition = str(part.get("Content-Disposition", ""))
+        if "attachment" in content_disposition.lower():
+            count += 1
+    return count
+
+def get_inbox_count_logic(payload: EmailInboxPayload) -> int:
+    """Core logic to fetch inbox count safely."""
+    mail = None
+    try:
+        mail = connect_imap(payload)
+
+        status, _ = mail.select("INBOX")
+        if status != "OK":
+            raise Exception("Unable to open INBOX folder.")
+
+        status, data = mail.search(None, "ALL")
+        if status != "OK":
+            raise Exception("Unable to search INBOX.")
+
+        email_ids = data[0].split()
+        return len(email_ids)
+
+    finally:
+        if mail:
+            try:
+                mail.logout()
+            except Exception:
+                pass
+
+
+def get_first_email_logic(payload: EmailInboxPayload) -> Dict[str, Any]:
+    """Core logic to fetch the first email, back it up, and delete it."""
+    mail = None
+    try:
+        mail = connect_imap(payload)
+
+        status, _ = mail.select("INBOX")
+        if status != "OK":
+            raise Exception("Unable to open INBOX folder.")
+
+        status, data = mail.search(None, "ALL")
+        if status != "OK":
+            raise Exception("Unable to search INBOX.")
+
+        email_ids = data[0].split()
+
+        if not email_ids:
+            return {
+                "email_found": False,
+                "message": "No email available",
+                "backup_folder": payload.backup_folder
+            }
+
+        first_email_id = email_ids[0]
+
+        status, msg_data = mail.fetch(first_email_id, "(RFC822)")
+        if status != "OK":
+            raise Exception("Unable to fetch the email.")
+
+        raw_email = msg_data[0][1]
+        parsed_email = message_from_bytes(raw_email)
+
+        subject = decode_mime_words(parsed_email.get("Subject"))
+        from_email = parsed_email.get("From")
+        to_email = parsed_email.get("To")
+        email_date = parsed_email.get("Date")
+
+        email_msg_base64 = base64.b64encode(raw_email).decode("utf-8")
+        attachment_count = get_attachment_count(parsed_email)
+
+        try:
+            mail.create(payload.backup_folder)
+        except imaplib.IMAP4.error:
+            pass
+
+        copy_status, _ = mail.copy(first_email_id, payload.backup_folder)
+        if copy_status != "OK":
+            raise Exception("Unable to copy email to backup folder.")
+
+        mail.store(first_email_id, "+FLAGS", "\\Deleted")
+        mail.expunge()
+
+        return {
+            "email_found": True,
+            "subject": subject,
+            "from_email": from_email,
+            "to_email": to_email,
+            "date": email_date,
+            "email_msg_base64": email_msg_base64,
+            "attachment_count": attachment_count,
+            "backup_folder": payload.backup_folder
+        }
+
+    finally:
+        if mail:
+            try:
+                mail.logout()
+            except Exception:
+                pass
