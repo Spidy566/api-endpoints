@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Added Gemini extraction models           | 11-05-2026 | vishal
 Models for Bill of Lading & Doc extract  | 07-01-2026 | vishal
 Models for Visiting Card response        | 02-10-2025 | dhremagi
 Models for OpenAI generic extraction     | 13-06-2025 | senthil
@@ -84,4 +85,16 @@ class AIExtractDocumentRequest(BaseModel):
 class AIExtractDocumentResponse(BaseModel):
     success: bool = Field(..., title="", description="Indicates whether the document extraction was successful.")
     extracted_data: Dict[str, Any] = Field(..., description="The structured JSON extracted based on your prompts.")
+    error: Optional[str] = Field(default=None, title="", description="Detailed error message if the extraction failed, otherwise null.")
+
+class AIGeminiExtractRequest(BaseModel):
+    base64_file: str = Field(..., description="Base64 encoded string of the file (PDF, JPG, PNG).")
+    gemini_api_key: str = Field(..., description="Your Google Gemini API Key.")
+    model: str = Field(default="gemini-2.5-flash", description="The Gemini model to use (e.g., gemini-2.5-flash).")
+    system_prompt_b64: str = Field(..., description="The system instruction defining the JSON structure, in base64.")
+    user_prompt_b64: str = Field(..., description="The user instruction on what to extract, in base64.")
+
+class AIGeminiExtractResponse(BaseModel):
+    success: bool = Field(..., title="", description="Indicates whether the document extraction was successful.")
+    extracted_data: Dict[str, Any] = Field(default_factory=dict, description="The structured JSON extracted based on your prompts.")
     error: Optional[str] = Field(default=None, title="", description="Detailed error message if the extraction failed, otherwise null.")

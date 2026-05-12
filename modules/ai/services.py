@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Added Google GenAI SDK extraction logic  | 11-05-2026 | vishal
 Increased the openai api timeout         | 26-02-2026 | vishal
 Implemented dynamic document extraction  | 03-02-2026 | vishal
 Added Bill of Lading extraction logic    | 07-01-2026 | vishal
@@ -23,6 +24,8 @@ from openai.types.chat import (
     ChatCompletionContentPartTextParam,
     ChatCompletionContentPartImageParam
 )
+from google import genai
+from google.genai import types, errors
 
 from typing import Dict, Any, List
 from core.config import logger
@@ -389,4 +392,77 @@ def extract_document(api_key: str, base64_file: str, model: str, system_prompt_b
         return {"success": False, "error": f"OpenAI API Error: {str(api_err)}"}
     except Exception as e:
         logger.error(f"Generic Doc Error: {e}")
+        return {"success": False, "error": str(e)}
+
+
+def extract_with_gemini(api_key: str, base64_file: str, model_name: str, system_prompt_b64: str,
+                        user_prompt_b64: str) -> Dict[str, Any]:
+    """
+    Extract structured JSON data from a document using the new Google GenAI SDK.
+    Prompts are provided as Base64 strings.
+    """
+    try:
+        system_prompt = utils.decode_base64_string(system_prompt_b64)
+        user_prompt = utils.decode_base64_string(user_prompt_b64)
+
+        if not system_prompt or not user_prompt:
+            return {"success": False, "error": "Invalid Base64 prompts provided. Could not decode."}
+
+        clean_b64 = utils.extract_base64_content(base64_file)
+        if not clean_b64:
+            return {"success": False, "error": "Invalid base64 provided"}
+
+        file_bytes = base64.b64decode(clean_b64)
+
+        if clean_b64.startswith("JVBERi"):
+            detected_mime_type = "application/pdf"
+        elif clean_b64.startswith("iVBOR"):
+            detected_mime_type = "image/png"
+        elif clean_b64.startswith("/9j/"):
+            detected_mime_type = "image/jpeg"
+        else:
+            detected_mime_type = "application/pdf"
+
+        client = genai.Client(api_key=api_key)
+
+        document_part = types.Part.from_bytes(data=file_bytes, mime_type=detected_mime_type)
+
+        config = types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            response_mime_type="application/json",
+            temperature=0.0
+        )
+
+        logger.info(f"Sending request to Gemini ({model_name}) with {detected_mime_type}")
+
+        response = client.models.generate_content(
+            model=model_name,
+            contents=[user_prompt, document_part],
+            config=config
+        )
+
+        ai_response = response.text.strip()
+
+        if ai_response.startswith('```json'):
+            ai_response = ai_response[7:]
+        if ai_response.startswith('```'):
+            ai_response = ai_response[3:]
+        if ai_response.endswith('```'):
+            ai_response = ai_response[:-3]
+
+        ai_response = ai_response.strip()
+
+        extracted_data = json.loads(ai_response)
+        cleaned_data = utils.clean_json_newlines(extracted_data)
+
+        return {"success": True, "extracted_data": cleaned_data}
+
+    except errors.APIError as api_err:
+        logger.error(f"Gemini API Error [{api_err.code}]: {api_err.message}")
+        return {"success": False, "error": f"API Error {api_err.code}: {api_err.message}"}
+    except json.JSONDecodeError as json_err:
+        logger.error(f"Gemini JSON Parse Error: {json_err}")
+        return {"success": False, "error": f"Failed to parse AI output as JSON: {json_err}"}
+    except Exception as e:
+        logger.error(f"Gemini Processing Error: {str(e)}")
         return {"success": False, "error": str(e)}

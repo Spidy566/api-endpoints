@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Added /gemini_extract endpoint           | 11-05-2026 | vishal
 Added /extract_document                  | 03-02-2026 | vishal
 Added /extract_bl                        | 07-01-2026 | vishal
 Added /scan_vc                           | 02-10-2025 | dhremagi
@@ -213,4 +214,45 @@ async def extract_document(request: schemas.AIExtractDocumentRequest):
     except HTTPException:
         raise
     except Exception as route_err:
+        raise HTTPException(status_code=500, detail=f"Server Error: {str(route_err)}")
+
+@router.post(
+    "/gemini_extract",
+    summary="Extract Document via Gemini",
+    description="Extracts data from a base64 document (PDF/Img) into a strict structured JSON format using Google Gemini API. Prompts must be base64 encoded.",
+    response_model=schemas.AIGeminiExtractResponse
+)
+async def gemini_extract(request: schemas.AIGeminiExtractRequest):
+    try:
+        if not request.base64_file:
+            raise HTTPException(status_code=400, detail="File content is required")
+
+        loop = asyncio.get_running_loop()
+
+        # Run extraction in a thread pool to prevent blocking the async event loop
+        result = await loop.run_in_executor(
+            thread_pool_executor,
+            services.extract_with_gemini,
+            request.gemini_api_key,
+            request.base64_file,
+            request.model,
+            request.system_prompt_b64,
+            request.user_prompt_b64
+        )
+
+        if not result["success"]:
+            error_msg = result.get("error", "Unknown error")
+            status_code = 502 if "API Error" in error_msg else 500
+            raise HTTPException(status_code=status_code, detail=error_msg)
+
+        return {
+            "success": True,
+            "extracted_data": result["extracted_data"],
+            "error": None
+        }
+
+    except HTTPException:
+        raise
+    except Exception as route_err:
+        logger.error(f"Gemini Route Error: {route_err}")
         raise HTTPException(status_code=500, detail=f"Server Error: {str(route_err)}")

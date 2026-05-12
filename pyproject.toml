@@ -9,6 +9,7 @@ dependencies = [
     "docxtpl>=0.20.2",
     "extract-msg>=0.55.0",
     "fastapi[standard]>=0.124.0",
+    "google-genai>=2.0.1",
     "openai>=2.12.0",
     "paramiko>=4.0.0",
     "pillow>=12.0.0",
