@@ -25,6 +25,7 @@ from core.openapi import configure_openapi
 from modules.ai import routes as ai_routes
 from modules.aws import routes as aws_routes
 from modules.backup import routes as backup_routes
+from modules.crypto import routes as crypto_routes
 from modules.documents import routes as documents_routes
 from modules.email import routes as email_routes
 from modules.logs import routes as logs_routes
@@ -56,6 +57,7 @@ async def lifespan(_: FastAPI):
 TAGS_METADATA = [
     {"name": "AI", "description": "OpenAI, OCR, and Extraction services."},
     {"name": "AWS", "description": "S3 Storage and Textract analysis."},
+    {"name": "Crypto", "description": "Asymmetric and Symmetric Cryptographic services."},
     {"name": "Signature", "description": "Digital PFX Signatures."},
     {"name": "SFTP", "description": "Remote file transfer services."},
     {"name": "Proxy", "description": "Generic API Gateway / Forwarder"},
@@ -83,6 +85,7 @@ app.exception_handler(ResponseValidationError)(validation_exception_handler)
 
 app.include_router(ai_routes.router, tags=["AI"])
 app.include_router(aws_routes.router, tags=["AWS"])
+app.include_router(crypto_routes.router, tags=["Crypto"])
 app.include_router(backup_routes.router, tags=["Backup"])
 app.include_router(documents_routes.router, tags=["Documents"])
 app.include_router(email_routes.router, tags=["Email"])
@@ -105,13 +108,12 @@ async def root(request: Request):
         "total_requests": total_requests,
         "features": [tag['name'] for tag in TAGS_METADATA]
     }
-    return templates.TemplateResponse("home.html", context)
+    return templates.TemplateResponse(request=request, name="home.html", context=context)
 
 
 @app.get("/redoc", include_in_schema=False)
 async def custom_redoc(request: Request):
-    return templates.TemplateResponse("redoc.html", {"request": request, "title": APP_TITLE})
-
+    return templates.TemplateResponse(request=request, name="redoc.html", context={"title": APP_TITLE})
 
 def custom_openapi_wrapper():
     return configure_openapi(app, APP_TITLE, APP_VERSION, APP_DESC, TAGS_METADATA)
