@@ -689,6 +689,7 @@ version = "3.0.0"
 source = { virtual = "." }
 dependencies = [
     { name = "boto3" },
+    { name = "cryptography" },
     { name = "docxtpl" },
     { name = "extract-msg" },
     { name = "fastapi", extra = ["standard"] },
@@ -696,16 +697,19 @@ dependencies = [
     { name = "openai" },
     { name = "paramiko" },
     { name = "pillow" },
+    { name = "pydantic" },
     { name = "pyhanko" },
     { name = "pymupdf" },
     { name = "pypdf" },
     { name = "requests" },
     { name = "unoconv" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "boto3", specifier = ">=1.42.4" },
+    { name = "cryptography", specifier = ">=48.0.0" },
     { name = "docxtpl", specifier = ">=0.20.2" },
     { name = "extract-msg", specifier = ">=0.55.0" },
     { name = "fastapi", extras = ["standard"], specifier = ">=0.124.0" },
@@ -713,11 +717,13 @@ requires-dist = [
     { name = "openai", specifier = ">=2.12.0" },
     { name = "paramiko", specifier = ">=4.0.0" },
     { name = "pillow", specifier = ">=12.0.0" },
+    { name = "pydantic", specifier = ">=2.13.4" },
     { name = "pyhanko", specifier = ">=0.32.0" },
     { name = "pymupdf", specifier = ">=1.26.6" },
     { name = "pypdf", specifier = ">=6.4.1" },
     { name = "requests", specifier = ">=2.32.5" },
     { name = "unoconv", specifier = ">=0.9.0" },
+    { name = "uvicorn", specifier = ">=0.48.0" },
 ]
 
 [[package]]
