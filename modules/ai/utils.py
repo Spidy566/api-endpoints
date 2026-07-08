@@ -4,13 +4,20 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Added Office format detection & conversion| 07-07-2026 | vishal
 Added JSON newline cleaning utilities    | 03-02-2026 | vishal
 Base64 and PDF-to-Image converters       | 13-06-2025 | senthil
 ---------------------------------------------------------------------------
 """
 import io
+import os
+import uuid
 import base64
 import binascii
+import zipfile
+import tempfile
+import subprocess
+import signal
 import fitz
 from PIL import Image
 from typing import List, Optional
@@ -49,6 +56,94 @@ def detect_and_validate_format(base64_content: str) -> str:
         if base64_content.startswith(signature):
             return format_name
     raise ValueError("Unsupported file format. Only PDF, JPEG, JPG, and PNG are allowed.")
+
+
+def detect_office_format(file_bytes: bytes) -> Optional[str]:
+    """
+    Detects Word / Excel file formats from magic bytes in-memory.
+    Returns: 'docx', 'xlsx', 'doc', 'xls', 'pdf', or None.
+    """
+    if len(file_bytes) < 4:
+        return None
+
+    # Check for Zip format (modern OpenXML: docx, xlsx)
+    if file_bytes.startswith(b"PK\x03\x04"):
+        try:
+            with zipfile.ZipFile(io.BytesIO(file_bytes)) as z:
+                namelist = z.namelist()
+                if any("word/" in name for name in namelist):
+                    return "docx"
+                if any("xl/" in name for name in namelist):
+                    return "xlsx"
+        except Exception as e:
+            logger.debug(f"Zip inspection failed: {e}")
+        return "zip"
+
+    # Check for OLECF format (legacy Binary: doc, xls)
+    if file_bytes.startswith(b"\xD0\xCF\x11\xE0"):
+        # Scan inside binary to locate typical structures
+        if b"Workbook" in file_bytes or b"Book" in file_bytes:
+            return "xls"
+        return "doc"
+
+    if file_bytes.startswith(b"%PDF"):
+        return "pdf"
+
+    return None
+
+
+def convert_office_to_pdf_unoconv(office_data: bytes, extension: str) -> bytes:
+    """
+    Converts Word / Excel raw bytes to PDF bytes using local unoconv / LibreOffice.
+    """
+    suffix = f".{extension.lower().lstrip('.')}"
+
+    with tempfile.TemporaryDirectory() as temp_dir:
+        file_id = uuid.uuid4()
+        temp_office_path = os.path.join(temp_dir, f"{file_id}{suffix}")
+        expected_pdf_path = os.path.join(temp_dir, f"{file_id}.pdf")
+
+        # Write original source file with correct extension
+        with open(temp_office_path, "wb") as f:
+            f.write(office_data)
+
+        command = [
+            "/usr/bin/python3",
+            "/usr/bin/unoconv",
+            "--format", "pdf",
+            "-o", expected_pdf_path,
+            temp_office_path
+        ]
+
+        logger.info(f"Calling unoconv to convert {extension.upper()} to PDF...")
+        proc = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            preexec_fn=os.setsid if hasattr(os, 'setsid') else None
+        )
+
+        try:
+            stdout, stderr = proc.communicate(timeout=180)
+        except subprocess.TimeoutExpired:
+            logger.error("unoconv conversion execution timed out.")
+            if hasattr(os, 'killpg') and hasattr(os, 'getpgid'):
+                os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+            else:
+                proc.kill()
+            proc.wait()
+            raise RuntimeError("unoconv conversion timed out after 3 minutes.")
+
+        if proc.returncode != 0:
+            error_message = f"unoconv conversion failed (Code {proc.returncode}).\nStderr: {stderr.decode(errors='ignore')}"
+            logger.error(error_message)
+            raise RuntimeError(error_message)
+
+        if not os.path.exists(expected_pdf_path):
+            raise FileNotFoundError(f"PDF compilation target not found: {expected_pdf_path}")
+
+        with open(expected_pdf_path, "rb") as f:
+            return f.read()
 
 
 def convert_pdf_to_jpeg(pdf_base64: str) -> List[str]:

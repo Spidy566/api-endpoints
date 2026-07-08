@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Added inline Office-to-PDF conversion    | 07-07-2026 | vishal
 Added Google GenAI SDK extraction logic  | 11-05-2026 | vishal
 Increased the openai api timeout         | 26-02-2026 | vishal
 Implemented dynamic document extraction  | 03-02-2026 | vishal
@@ -295,7 +296,7 @@ def extract_bl_data(api_key: str, base64_file: str, model: str) -> Dict[str, Any
 
 def extract_document(api_key: str, base64_file: str, model: str, system_prompt_b64: str, user_prompt_b64: str) -> Dict[str, Any]:
     """
-    Generic extraction using dynamic prompts.
+    Generic extraction using dynamic prompts. Supports Docx, Doc, Xlsx, Xls, PDF, and Images.
     """
     try:
         system_prompt = utils.decode_base64_string(system_prompt_b64)
@@ -307,6 +308,19 @@ def extract_document(api_key: str, base64_file: str, model: str, system_prompt_b
         clean_b64 = utils.extract_base64_content(base64_file)
         if not clean_b64:
             return {"success": False, "error": "Invalid base64 provided"}
+
+        # Format detection and pre-processing
+        raw_bytes = base64.b64decode(clean_b64)
+        detected_format = utils.detect_office_format(raw_bytes)
+
+        if detected_format in ["docx", "doc", "xlsx", "xls"]:
+            logger.info(f"Detected Office Document layout: {detected_format.upper()}. Compiling to PDF first...")
+            try:
+                pdf_bytes = utils.convert_office_to_pdf_unoconv(raw_bytes, detected_format)
+                clean_b64 = base64.b64encode(pdf_bytes).decode('utf-8')
+            except Exception as conv_err:
+                logger.error(f"Failed Office-to-PDF pre-processing: {conv_err}")
+                return {"success": False, "error": f"Failed to pre-process {detected_format.upper()}: {str(conv_err)}"}
 
         try:
             base64_images = utils.extract_image(clean_b64)
@@ -344,7 +358,6 @@ def extract_document(api_key: str, base64_file: str, model: str, system_prompt_b
                     mime_type = "image/jpeg"
 
                 final_url = f"data:{mime_type};base64,{img_b64}"
-
 
             vision_content.append(
                 ChatCompletionContentPartImageParam(
@@ -399,7 +412,7 @@ def extract_with_gemini(api_key: str, base64_file: str, model_name: str, system_
                         user_prompt_b64: str) -> Dict[str, Any]:
     """
     Extract structured JSON data from a document using the new Google GenAI SDK.
-    Prompts are provided as Base64 strings.
+    Supports Docx, Doc, Xlsx, Xls, PDF, and Images.
     """
     try:
         system_prompt = utils.decode_base64_string(system_prompt_b64)
@@ -412,7 +425,18 @@ def extract_with_gemini(api_key: str, base64_file: str, model_name: str, system_
         if not clean_b64:
             return {"success": False, "error": "Invalid base64 provided"}
 
-        file_bytes = base64.b64decode(clean_b64)
+        # Format detection and pre-processing
+        raw_bytes = base64.b64decode(clean_b64)
+        detected_format = utils.detect_office_format(raw_bytes)
+
+        if detected_format in ["docx", "doc", "xlsx", "xls"]:
+            logger.info(f"Detected Office Document layout: {detected_format.upper()}. Compiling to PDF first...")
+            try:
+                raw_bytes = utils.convert_office_to_pdf_unoconv(raw_bytes, detected_format)
+                clean_b64 = base64.b64encode(raw_bytes).decode('utf-8')
+            except Exception as conv_err:
+                logger.error(f"Failed Office-to-PDF pre-processing: {conv_err}")
+                return {"success": False, "error": f"Failed to pre-process {detected_format.upper()}: {str(conv_err)}"}
 
         if clean_b64.startswith("JVBERi"):
             detected_mime_type = "application/pdf"
@@ -425,7 +449,7 @@ def extract_with_gemini(api_key: str, base64_file: str, model_name: str, system_
 
         client = genai.Client(api_key=api_key)
 
-        document_part = types.Part.from_bytes(data=file_bytes, mime_type=detected_mime_type)
+        document_part = types.Part.from_bytes(data=raw_bytes, mime_type=detected_mime_type)
 
         config = types.GenerateContentConfig(
             system_instruction=system_prompt,
