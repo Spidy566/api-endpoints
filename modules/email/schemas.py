@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Added email_pdf_base64 response property | 08-07-2026 | vishal
 Added IMAP inbox models and payloads     | 05-05-2026 | vishal
 Models for SMTP Email config             | 03-12-2025 | vishal
 Models for email extraction results      | 13-06-2025 | senthil
@@ -97,5 +98,6 @@ class EmailInboxGetResponse(BaseModel):
     to_email: Optional[str] = Field(default=None, title="", description="Recipient email address.")
     date: Optional[str] = Field(default=None, title="", description="Date header of the email.")
     email_msg_base64: Optional[str] = Field(default=None, title="", description="Base64 encoded raw email.")
+    email_pdf_base64: Optional[str] = Field(default=None, title="", description="Base64 encoded PDF representation of the entire email and its attachments.")
     attachment_count: int = Field(default=0, title="", description="Number of attachments inside the email.")
     backup_folder: Optional[str] = Field(default=None, title="", description="Folder where the email was moved.")

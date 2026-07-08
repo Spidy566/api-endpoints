@@ -180,8 +180,8 @@ async def extract_bl(request: schemas.AIBillOfLadingRequest):
 
 @router.post(
     "/extract_document",
-    summary="Process Any Document",
-    description="Extracts data from any document (Invoice, Packing List, etc) using custom prompts.",
+    summary="Extract Document via OpenAI",
+    description="Extracts data from a base64 document (PDF, Img, DOCX, XLSX, DOC, XLS) using custom prompts.",
     response_model=schemas.AIExtractDocumentResponse
 )
 async def extract_document(request: schemas.AIExtractDocumentRequest):
@@ -219,7 +219,7 @@ async def extract_document(request: schemas.AIExtractDocumentRequest):
 @router.post(
     "/gemini_extract",
     summary="Extract Document via Gemini",
-    description="Extracts data from a base64 document (PDF/Img) into a strict structured JSON format using Google Gemini API. Prompts must be base64 encoded.",
+    description="Extracts data from a base64 document (PDF, Img, DOCX, XLSX, DOC, XLS) using custom prompts.",
     response_model=schemas.AIGeminiExtractResponse
 )
 async def gemini_extract(request: schemas.AIGeminiExtractRequest):

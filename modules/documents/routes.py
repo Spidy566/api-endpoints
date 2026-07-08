@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Updated merge_pdf route formats          | 08-07-2026 | vishal
 Added /generate-report                   | 03-12-2025 | vishal
 Added /merge_pdf                         | 03-12-2025 | dhremagi
 ---------------------------------------------------------------------------
@@ -110,7 +111,7 @@ async def generate_report(
 @router.post(
     "/merge_pdf",
     summary="Merge Files to PDF",
-    description="Accepts a list of Base64 files (PDFs or Images), merges them into a single PDF, and returns the result as Base64.",
+    description="Accepts a list of Base64 files (PDF, WEBP, DOCX, XLSX, JPEG, PNG, JPG, TXT, CSV, DOC, XLS, EML, MSG), merges them into a single PDF, and returns the result as Base64.",
     response_model=schemas.DocMergeResponse,
 )
 async def merge_base64_json(files: list[schemas.DocMergeItem] = Body(..., title="", description="List of files to merge.")):

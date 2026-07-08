@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Generates whole email pdf representation | 08-07-2026 | vishal
 Added IMAP inbox connection and fetching | 05-05-2026 | dhremagi
 SMTP sending with AES password decrypt   | 03-12-2025 | vishal
 EML/MSG attachment extraction logic      | 13-06-2025 | senthil
@@ -488,7 +489,7 @@ def get_inbox_count_logic(payload: EmailInboxPayload) -> int:
 
 
 def get_first_email_logic(payload: EmailInboxPayload) -> Dict[str, Any]:
-    """Core logic to fetch the first email, back it up, and delete it."""
+    """Core logic to fetch the first email, back it up, delete it, and compile it to PDF."""
     mail = None
     try:
         mail = connect_imap(payload)
@@ -527,6 +528,15 @@ def get_first_email_logic(payload: EmailInboxPayload) -> Dict[str, Any]:
         email_msg_base64 = base64.b64encode(raw_email).decode("utf-8")
         attachment_count = get_attachment_count(parsed_email)
 
+        email_pdf_base64 = None
+        try:
+            from modules.documents.services import convert_single_file_to_pdf
+            logger.info("Compiling fetched IMAP email into high-fidelity PDF representation...")
+            pdf_bytes = convert_single_file_to_pdf(raw_email, "email.eml", "message/rfc822")
+            email_pdf_base64 = base64.b64encode(pdf_bytes).decode("utf-8")
+        except Exception as pdf_err:
+            logger.error(f"Failed to generate inbox email PDF: {pdf_err}", exc_info=True)
+
         try:
             mail.create(payload.backup_folder)
         except imaplib.IMAP4.error:
@@ -546,6 +556,7 @@ def get_first_email_logic(payload: EmailInboxPayload) -> Dict[str, Any]:
             "to_email": to_email,
             "date": email_date,
             "email_msg_base64": email_msg_base64,
+            "email_pdf_base64": email_pdf_base64,
             "attachment_count": attachment_count,
             "backup_folder": payload.backup_folder
         }
