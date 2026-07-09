@@ -142,6 +142,13 @@ def convert_office_to_pdf_unoconv(office_data: bytes, extension: str) -> bytes:
             return f.read()
 
 
+def convert_docx_to_pdf_unoconv(docx_data: bytes) -> bytes:
+    """
+    Backwards compatible wrapper for the generate-report routes.
+    """
+    return convert_office_to_pdf_unoconv(docx_data, "docx")
+
+
 def convert_image_to_pdf(image_bytes: bytes) -> io.BytesIO:
     """Convert image bytes (including webp, png, jpeg, jpg) to a single-page PDF."""
     try:
