@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Image placeholder exception handling     | 15-07-2026 | vishal
 Expanded merging support for 12 formats  | 07-07-2026 | vishal
 DOCX template rendering with images      | 07-01-2026 | vishal
 Unoconv DOCX to PDF conversion logic     | 03-12-2025 | vishal
@@ -31,23 +32,58 @@ import extract_msg
 from core.config import logger
 
 
+def _is_placeholder_in_docx(docx_bytes: bytes, placeholder: str) -> bool:
+    """
+    Scans the XML content of a DOCX archive to verify if an image placeholder
+    exists before calling replace_pic. Prevents ValueErrors from ever raising.
+    """
+    try:
+        patterns = [
+            f'descr="{placeholder}"',
+            f"descr='{placeholder}'",
+            f'title="{placeholder}"',
+            f"title='{placeholder}'"
+        ]
+
+        with zipfile.ZipFile(io.BytesIO(docx_bytes)) as z:
+            for name in z.namelist():
+                if name.endswith(".xml") or name.endswith(".rels"):
+                    content = z.read(name).decode("utf-8", errors="ignore")
+                    if any(pattern in content for pattern in patterns):
+                        return True
+        return False
+    except Exception as e:
+        logger.warning(f"Failed to pre-scan DOCX zip file structure for placeholder '{placeholder}': {e}")
+        return True
+
+
 def generate_docx(template_bytes: bytes, context: dict, images: List[Dict[str, str]] = None) -> bytes:
     temp_image_paths: List[str] = []
     try:
         tpl = DocxTemplate(io.BytesIO(template_bytes))
         if images:
             for image_item in images:
+                if not isinstance(image_item, dict):
+                    continue
+
                 source = image_item.get("source")
                 placeholder = image_item.get("placeholder")
 
                 if not source or not placeholder:
                     continue
+
+                if not _is_placeholder_in_docx(template_bytes, placeholder):
+                    logger.warning(
+                        f"Image placeholder '{placeholder}' not found in DOCX template XML. Skipping safely."
+                    )
+                    continue
+
                 try:
                     try:
                         image_bytes = base64.b64decode(source)
                         image_stream = io.BytesIO(image_bytes)
                     except (binascii.Error, ValueError) as b64_err:
-                        logger.warning(f"Invalid raw base64 for {placeholder}: {b64_err}")
+                        logger.warning(f"Invalid raw base64 payload for image '{placeholder}': {b64_err}")
                         continue
 
                     if image_stream:
@@ -60,11 +96,13 @@ def generate_docx(template_bytes: bytes, context: dict, images: List[Dict[str, s
                         try:
                             tpl.replace_pic(placeholder, temp_path)
                             logger.info(f"Replaced image placeholder: {placeholder}")
-                        except Exception as e:
-                            logger.warning(f"Could not replace pic '{placeholder}': {e}")
+                        except Exception as pic_err:
+                            logger.warning(
+                                f"Skipped replacing image '{placeholder}' (Not found in docx template or missing tag): {pic_err}"
+                            )
 
-                except Exception as e:
-                    logger.error(f"Failed to process image for '{placeholder}': {e}")
+                except Exception as loop_err:
+                    logger.error(f"Failed to process image item for '{placeholder}': {loop_err}")
 
         tpl.render(context, autoescape=True)
         final_docx_buffer = io.BytesIO()
@@ -82,8 +120,8 @@ def generate_docx(template_bytes: bytes, context: dict, images: List[Dict[str, s
             try:
                 if os.path.exists(path):
                     os.remove(path)
-            except OSError:
-                pass
+            except OSError as os_err:
+                logger.warning(f"Cleanup failure for temp file '{path}': {os_err}")
 
 
 def convert_office_to_pdf_unoconv(office_data: bytes, extension: str) -> bytes:
