@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Thread pool execution for IMAP / PDF     | 27-07-2026 | vishal
 Added IMAP inbox processing endpoints    | 05-05-2026 | dhremagi
 Added SMTP email sending                 | 03-12-2025 | vishal
 Added attachment extraction endpoints    | 13-06-2025 | senthil
@@ -11,9 +12,12 @@ Added attachment extraction endpoints    | 13-06-2025 | senthil
 """
 import base64
 import binascii
+import asyncio
 from typing import Dict, Any
 from fastapi import APIRouter, HTTPException, UploadFile, File
+
 from core.config import logger
+from core.dependencies import thread_pool_executor
 from modules.email import schemas, services
 
 router = APIRouter()
@@ -186,7 +190,12 @@ async def send_email_endpoint(request: schemas.EmailSendRequest):
 )
 async def email_inbox_count(payload: schemas.EmailInboxPayload):
     try:
-        count = services.get_inbox_count_logic(payload)
+        loop = asyncio.get_running_loop()
+        count = await loop.run_in_executor(
+            thread_pool_executor,
+            services.get_inbox_count_logic,
+            payload
+        )
         return {"success": True, "email_count": count}
 
     except ValueError as e:
@@ -205,7 +214,12 @@ async def email_inbox_count(payload: schemas.EmailInboxPayload):
 )
 async def email_inbox_get_first_email(payload: schemas.EmailInboxPayload):
     try:
-        result = services.get_first_email_logic(payload)
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(
+            thread_pool_executor,
+            services.get_first_email_logic,
+            payload
+        )
 
         return {
             "success": True,

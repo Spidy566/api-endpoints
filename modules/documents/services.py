@@ -4,6 +4,7 @@ Commit History
 ---------------------------------------------------------------------------
 Description                              | Date       | Developer
 ---------------------------------------------------------------------------
+Added Playwright HTML-to-PDF conversion  | 27-07-2026 | vishal
 Image placeholder exception handling     | 15-07-2026 | vishal
 Expanded merging support for 12 formats  | 07-07-2026 | vishal
 DOCX template rendering with images      | 07-01-2026 | vishal
@@ -28,6 +29,7 @@ from PIL import Image, UnidentifiedImageError
 from pypdf import PdfWriter, PdfReader
 from docxtpl import DocxTemplate
 import extract_msg
+from playwright.sync_api import sync_playwright, Error as PlaywrightError
 
 from core.config import logger
 
@@ -197,6 +199,51 @@ def convert_image_to_pdf(image_bytes: bytes) -> io.BytesIO:
         return pdf_bytes
     except (UnidentifiedImageError, OSError) as img_err:
         raise ValueError(f"Image conversion failed: {str(img_err)}")
+
+
+def convert_html_to_pdf_playwright(html_bytes: bytes) -> bytes:
+    """
+    Converts HTML markup to standard PDF bytes using Playwright's headless Chromium.
+    Includes a self-healing fallback mechanism that tolerates network load timeouts
+    for slow remote assets like tracking pixels or external fonts.
+    """
+    try:
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
+            )
+            context = browser.new_context()
+            page = context.new_page()
+
+            html_content = html_bytes.decode("utf-8", errors="ignore")
+
+            try:
+                # Wait up to 10 seconds for standard remote resources to load
+                page.set_content(html_content, wait_until="load", timeout=10000)
+            except PlaywrightError as load_err:
+                logger.warning(
+                    f"Playwright: set_content load timeout (10s) exceeded. "
+                    f"Bypassing to render partially loaded DOM. Details: {load_err}"
+                )
+                try:
+                    # Attempt quick 2-second fallback load for document construction (no remote assets required)
+                    page.set_content(html_content, wait_until="domcontentloaded", timeout=2000)
+                except Exception:
+                    pass
+
+            page.emulate_media(media="print")
+
+            pdf_bytes = page.pdf(
+                format="A4",
+                print_background=True,
+                margin={"top": "0.4in", "bottom": "0.4in", "left": "0.4in", "right": "0.4in"}
+            )
+            browser.close()
+            return pdf_bytes
+    except Exception as e:
+        logger.error(f"Playwright PDF conversion error: {e}")
+        raise RuntimeError(f"Playwright conversion failed: {str(e)}")
 
 
 def build_email_header_block(from_val: str, to_val: str, cc_val: str, bcc_val: str, date_val: str, subject: str) -> str:
@@ -431,7 +478,7 @@ def parse_msg_to_html(msg_bytes: bytes) -> str:
 def convert_single_file_to_pdf(file_bytes: bytes, filename: str, mimetype: str) -> bytes:
     """
     Core routing helper to convert a single binary file payload into standard PDF bytes.
-    Handles standard formats: pdf, webp, docx, xlsx, jpeg, png, jpg, txt, csv, doc, xls.
+    Handles standard formats: pdf, webp, docx, xlsx, jpeg, png, jpg, txt, csv, doc, xls, html.
     For EML and MSG files, it compiles the main body PDF first, then recursively parses and appends attachments.
     """
     mime_to_ext = {
@@ -446,6 +493,7 @@ def convert_single_file_to_pdf(file_bytes: bytes, filename: str, mimetype: str) 
         "application/vnd.ms-excel": "xls",
         "text/plain": "txt",
         "text/csv": "csv",
+        "text/html": "html",
         "message/rfc822": "eml",
         "application/vnd.ms-outlook": "msg"
     }
@@ -462,6 +510,8 @@ def convert_single_file_to_pdf(file_bytes: bytes, filename: str, mimetype: str) 
             ext = "pdf"
         elif file_bytes.startswith(b"PK\x03\x04"):
             ext = "docx"
+        elif file_bytes.startswith(b"<!DOCTYPE html") or file_bytes.startswith(b"<html"):
+            ext = "html"
         else:
             ext = "txt"
 
@@ -475,10 +525,13 @@ def convert_single_file_to_pdf(file_bytes: bytes, filename: str, mimetype: str) 
     elif ext in ["docx", "doc", "xlsx", "xls", "txt", "csv"]:
         return convert_office_to_pdf_unoconv(file_bytes, ext)
 
+    elif ext == "html":
+        return convert_html_to_pdf_playwright(file_bytes)
+
     elif ext == "eml":
-        # Process EML body (rich HTML or plaintext format)
+        # Process EML body (rich HTML or plaintext format) using Playwright
         email_html = parse_eml_to_html(file_bytes)
-        body_pdf_bytes = convert_office_to_pdf_unoconv(email_html.encode("utf-8"), "html")
+        body_pdf_bytes = convert_html_to_pdf_playwright(email_html.encode("utf-8"))
 
         # Recursively parse and append EML attachments
         msg = message_from_bytes(file_bytes)
@@ -518,9 +571,9 @@ def convert_single_file_to_pdf(file_bytes: bytes, filename: str, mimetype: str) 
         return body_pdf_bytes
 
     elif ext == "msg":
-        # Process MSG body
+        # Process MSG body using Playwright
         email_html = parse_msg_to_html(file_bytes)
-        body_pdf_bytes = convert_office_to_pdf_unoconv(email_html.encode("utf-8"), "html")
+        body_pdf_bytes = convert_html_to_pdf_playwright(email_html.encode("utf-8"))
 
         # Extract OLE attachments recursively
         attachment_pdfs: List[bytes] = [body_pdf_bytes]
@@ -582,7 +635,7 @@ def convert_single_file_to_pdf(file_bytes: bytes, filename: str, mimetype: str) 
 def merge_files_logic(files: List[Dict[str, str]]) -> Dict[str, str]:
     """
     Accepts a list of Base64 files. Supports:
-    .pdf, .webp, .docx, .xlsx, .jpeg, .png, .jpg, .txt, .csv, .doc, .xls, .eml, .msg
+    .pdf, .webp, .docx, .xlsx, .jpeg, .png, .jpg, .txt, .csv, .doc, .xls, .eml, .msg, .html
     Converts and merges them into a single PDF document.
     """
     temp_pdfs: List[str] = []

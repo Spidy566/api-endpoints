@@ -24,7 +24,7 @@ class DocReportRequest(BaseModel):
 
 class DocMergeItem(BaseModel):
     filename: str = Field(default="file", title="", description="The original filename (used for logging/debugging).")
-    mimetype: str = Field(..., title="", description="The MIME type of the file. Supports PDF, WEBP, DOCX, XLSX, JPEG, PNG, JPG, TXT, CSV, DOC, XLS, EML, MSG.")
+    mimetype: str = Field(..., title="", description="The MIME type of the file. Supports PDF, WEBP, DOCX, XLSX, JPEG, PNG, JPG, TXT, CSV, DOC, XLS, EML, MSG, HTML.")
     base64content: str = Field(..., title="", description="Base64 encoded string of the file.")
 
 class DocMergeResponse(BaseModel):
